@@ -24,3 +24,5 @@
 .sidebar-collapsed .nav-group-trigger{justify-content:center;padding:0}
 @media(max-width:980px){.nav-group-trigger span,.nav-group-trigger .nav-arrow,.nav-sub{display:none}.nav-group-trigger{justify-content:center;padding:0}}
 @media(max-width:720px){.sidebar.mobile-open .nav-group-trigger span{display:initial}.sidebar.mobile-open .nav-group-trigger .nav-arrow{display:initial}.sidebar.mobile-open .nav-sub{display:grid}.sidebar.mobile-open .nav-group-trigger{justify-content:flex-start;padding:0 11px}}
+
+.spin{animation:spin 1s linear infinite}

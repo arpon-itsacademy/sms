@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\ExamController;
 use App\Http\Controllers\Api\FeeController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SettingsController;
+use App\Http\Controllers\Api\SmsSettingsController;
 use App\Http\Controllers\Api\StudentController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Middleware\EnsureAdministrator;
@@ -59,6 +60,10 @@ Route::middleware(['auth:sanctum', EnsureAdministrator::class])->group(function 
 
     Route::get('/settings', [SettingsController::class, 'show']);
     Route::put('/settings', [SettingsController::class, 'update']);
+    Route::get('/settings/sms', [SmsSettingsController::class, 'show']);
+    Route::put('/settings/sms', [SmsSettingsController::class, 'update']);
+    Route::get('/settings/sms/balance', [SmsSettingsController::class, 'balance']);
+    Route::post('/settings/sms/test', [SmsSettingsController::class, 'test']);
 
     Route::get('/users', [UserController::class, 'index']);
     Route::post('/users', [UserController::class, 'store']);

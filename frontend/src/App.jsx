@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import {
   Activity, ArrowDownToLine, ArrowLeft, BookOpen, CalendarCheck, CalendarDays, ChartNoAxesCombined,
   Check, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, ClipboardList, CreditCard, Eye, EyeOff, GraduationCap, LayoutDashboard,
-  LogOut, Menu, Plus, Search, Settings, ShieldCheck, SlidersHorizontal, Sparkles, Trash2, UserPlus, Users, X,
+  LogOut, Menu, MessageSquare, Plus, RefreshCw, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Sparkles, Trash2, UserPlus, Users, X,
 } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { api, API_ORIGIN, messageFromError, responseData, startSession } from './api.js';
@@ -32,11 +32,17 @@ function App() {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [userMenuOpen, setUserMenuOpen] = useState(location.pathname.startsWith('/users'));
+  const [openMenus, setOpenMenus] = useState({
+    User: location.pathname.startsWith('/users'),
+    Settings: location.pathname.startsWith('/settings'),
+  });
 
   useEffect(() => {
     if (location.pathname.startsWith('/users')) {
-      setUserMenuOpen(true);
+      setOpenMenus((prev) => ({ ...prev, User: true }));
+    }
+    if (location.pathname.startsWith('/settings')) {
+      setOpenMenus((prev) => ({ ...prev, Settings: true }));
     }
   }, [location.pathname]);
 
@@ -55,6 +61,7 @@ function App() {
     if (path === '/users') return 'All User';
     if (path === '/users/create') return 'Create New User';
     if (path === '/settings') return 'Settings';
+    if (path === '/settings/sms') return 'BulkSMSBD Configuration';
     return 'Workspace';
   };
 
@@ -88,10 +95,17 @@ function App() {
       icon: ShieldCheck,
       sublinks: [
         { to: '/users/create', label: 'Create New User', icon: UserPlus },
-        { to: '/users', label: 'All User', icon: Users },
+        { to: '/users', label: 'All User', icon: Users, end: true },
       ],
     },
-    { to: '/settings', label: 'Settings', icon: Settings },
+    {
+      label: 'Settings',
+      icon: Settings,
+      sublinks: [
+        { to: '/settings', label: 'General Settings', icon: SlidersHorizontal, end: true },
+        { to: '/settings/sms', label: 'BulkSMSBD Config', icon: MessageSquare },
+      ],
+    },
   ];
 
   if (location.pathname === '/login') return <Login />;
@@ -109,29 +123,30 @@ function App() {
         <nav className="side-nav">
           {links.map((item) => {
             if (item.sublinks) {
-              const isSubActive = location.pathname.startsWith('/users');
+              const isMenuOpen = Boolean(openMenus[item.label]);
+              const isGroupActive = item.sublinks.some((sub) => sub.end ? location.pathname === sub.to : location.pathname.startsWith(sub.to));
               return (
                 <div key={item.label} className="nav-group">
                   <button
                     type="button"
-                    className={`nav-group-trigger ${isSubActive ? 'active-parent' : ''}`}
+                    className={`nav-group-trigger ${isGroupActive ? 'active-parent' : ''}`}
                     onClick={() => {
                       if (collapsed) setCollapsed(false);
-                      setUserMenuOpen(!userMenuOpen);
+                      setOpenMenus((prev) => ({ ...prev, [item.label]: !prev[item.label] }));
                     }}
                     title={collapsed ? item.label : undefined}
                   >
                     <item.icon size={19} strokeWidth={1.8} />
                     <span>{item.label}</span>
-                    <ChevronDown size={14} className={`nav-arrow ${userMenuOpen ? 'rotated' : ''}`} />
+                    <ChevronDown size={14} className={`nav-arrow ${isMenuOpen ? 'rotated' : ''}`} />
                   </button>
-                  {userMenuOpen && !collapsed && (
+                  {isMenuOpen && !collapsed && (
                     <div className="nav-sub">
                       {item.sublinks.map((sub) => (
                         <NavLink
                           key={sub.to}
                           to={sub.to}
-                          end={sub.to === '/users'}
+                          end={sub.end}
                           onClick={() => setMobileOpen(false)}
                           className={({ isActive }) => `nav-sub-link ${isActive ? 'active' : ''}`}
                           title={sub.label}
@@ -188,6 +203,7 @@ function App() {
             <Route path="/users" element={<AllUsers currentUser={user} />} />
             <Route path="/users/create" element={<CreateUser />} />
             <Route path="/settings" element={<SettingsPage user={user} />} />
+            <Route path="/settings/sms" element={<BulkSmsSettings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
@@ -754,7 +770,16 @@ function SettingsPage({ user }) {
   };
   if (!data) return <LoadingPage />;
   return <>
-    <PageHeading eyebrow="WORKSPACE PREFERENCES" title="Settings" subtitle="Update coaching details and administrator preferences." />
+    <PageHeading
+      eyebrow="WORKSPACE PREFERENCES"
+      title="Settings"
+      subtitle="Update coaching details, administrator preferences and system integrations."
+      action={
+        <Link to="/settings/sms" className="button button-outline">
+          <MessageSquare size={15} /> BulkSMSBD Configuration
+        </Link>
+      }
+    />
     {toast && <Toast toast={toast} />}{error && <div className="form-alert">{error}</div>}
     <div className="settings-grid"><form className="card settings-card form-stack" onSubmit={saveSettings}><div className="card-heading"><div><h3>Coaching information</h3><p>Details used throughout your workspace.</p></div></div>
       <Field label="Institution name"><input value={values.institution_name || ''} onChange={(event) => updateSetting('institution_name', event.target.value)} placeholder="Your coaching centre" /></Field>
@@ -825,6 +850,242 @@ function TableSkeleton() {
 
 function Toast({ toast }) {
   return <div className={`toast ${toast.kind}`}><span>{toast.kind === 'error' ? <X size={16} /> : <Check size={16} />}</span>{toast.message}</div>;
+}
+
+function BulkSmsSettings() {
+  const queryClient = useQueryClient();
+  const { toast, notify } = useToast();
+  const [error, setError] = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const [testPhone, setTestPhone] = useState('');
+  const [testMessage, setTestMessage] = useState('Hello from ClassDesk! This is a test SMS.');
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['sms-settings'],
+    queryFn: async () => (await api.get('/settings/sms')).data.settings,
+  });
+
+  const [form, setForm] = useState(null);
+  const values = form || data || { api_key: '', sender_id: '', api_url: 'https://bulksmsbd.net/api/smsapi', type: 'text' };
+
+  const updateSetting = (key, val) => setForm({ ...values, [key]: val });
+
+  const saveSettingsMutation = useMutation({
+    mutationFn: (payload) => api.put('/settings/sms', payload),
+    onSuccess: (res) => {
+      queryClient.setQueryData(['sms-settings'], res.data.settings);
+      notify('BulkSMSBD configuration saved.');
+      setError('');
+    },
+    onError: (err) => {
+      setError(messageFromError(err));
+    },
+  });
+
+  const { data: balanceData, refetch: checkBalance, isFetching: isCheckingBalance } = useQuery({
+    queryKey: ['sms-balance'],
+    queryFn: async () => (await api.get('/settings/sms/balance')).data,
+    enabled: false,
+    retry: false,
+  });
+
+  const sendTestMutation = useMutation({
+    mutationFn: (payload) => api.post('/settings/sms/test', payload),
+    onSuccess: (res) => {
+      notify(res.data.message || 'Test SMS sent successfully!');
+      setError('');
+    },
+    onError: (err) => {
+      setError(messageFromError(err));
+    },
+  });
+
+  const handleSave = (e) => {
+    e.preventDefault();
+    setError('');
+    saveSettingsMutation.mutate({
+      api_key: values.api_key?.trim() || '',
+      sender_id: values.sender_id?.trim() || '',
+      api_url: values.api_url?.trim() || 'https://bulksmsbd.net/api/smsapi',
+      type: values.type || 'text',
+    });
+  };
+
+  const handleSendTest = (e) => {
+    e.preventDefault();
+    if (!testPhone.trim() || !testMessage.trim()) {
+      setError('Please provide both recipient phone number and test message.');
+      return;
+    }
+    setError('');
+    sendTestMutation.mutate({ phone: testPhone.trim(), message: testMessage.trim() });
+  };
+
+  if (isLoading) return <LoadingPage />;
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="SMS GATEWAY INTEGRATION"
+        title="BulkSMSBD Configuration"
+        subtitle="Configure your BulkSMSBD credentials to send instant and bulk SMS to students anytime."
+        action={
+          <Link className="button button-outline" to="/settings">
+            <SlidersHorizontal size={15} /> General Settings
+          </Link>
+        }
+      />
+      {toast && <Toast toast={toast} />}
+      {error && <div className="form-alert">{error}</div>}
+
+      <div className="settings-grid">
+        <form className="card settings-card form-stack" onSubmit={handleSave}>
+          <div className="card-heading">
+            <div>
+              <h3>API Credentials</h3>
+              <p>Credentials provided by your BulkSMSBD (bulksmsbd.com) account.</p>
+            </div>
+            <MessageSquare size={20} style={{ color: '#4779e8' }} />
+          </div>
+
+          <Field label="API Key" required>
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showKey ? 'text' : 'password'}
+                value={values.api_key || ''}
+                onChange={(e) => updateSetting('api_key', e.target.value)}
+                placeholder="Enter your BulkSMSBD API Key"
+                required
+                style={{ paddingRight: 36 }}
+              />
+              <button
+                type="button"
+                className="icon-button"
+                style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', padding: 4 }}
+                onClick={() => setShowKey(!showKey)}
+                aria-label="Toggle API Key visibility"
+              >
+                {showKey ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
+          </Field>
+
+          <Field label="Sender ID" required>
+            <input
+              type="text"
+              value={values.sender_id || ''}
+              onChange={(e) => updateSetting('sender_id', e.target.value)}
+              placeholder="e.g. 8809612... or approved Sender Name"
+              required
+            />
+          </Field>
+
+          <Field label="Gateway API URL">
+            <input
+              type="url"
+              value={values.api_url || 'https://bulksmsbd.net/api/smsapi'}
+              onChange={(e) => updateSetting('api_url', e.target.value)}
+              placeholder="https://bulksmsbd.net/api/smsapi"
+            />
+          </Field>
+
+          <Field label="Default Message Encoding">
+            <select
+              value={values.type || 'text'}
+              onChange={(e) => updateSetting('type', e.target.value)}
+            >
+              <option value="text">Standard Text (English - 160 characters/SMS)</option>
+              <option value="unicode">Unicode (Bangla / Multilingual - 70 characters/SMS)</option>
+            </select>
+          </Field>
+
+          <div className="info-note">
+            💡 If your message contains Bangla or special characters, our system automatically delivers it as Unicode so your recipients receive crystal-clear Bangla text.
+          </div>
+
+          <button
+            type="submit"
+            className="button button-primary align-start"
+            disabled={saveSettingsMutation.isPending}
+          >
+            {saveSettingsMutation.isPending ? 'Saving settings…' : 'Save SMS Configuration'}
+          </button>
+        </form>
+
+        <div className="settings-column">
+          <div className="card settings-card">
+            <div className="card-heading">
+              <div>
+                <h3>Account Balance & Status</h3>
+                <p>Check your live SMS wallet balance with BulkSMSBD.</p>
+              </div>
+              <span className={`status-pill ${values.is_configured ? 'active' : 'draft'}`}>
+                {values.is_configured ? 'Configured' : 'Needs Config'}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, margin: '8px 0 16px' }}>
+              <span style={{ fontSize: '26px', fontWeight: 700, color: '#1f2d44' }}>
+                {balanceData?.balance !== undefined ? `৳ ${balanceData.balance}` : '—'}
+              </span>
+              <small style={{ color: '#8898aa', fontSize: '11px' }}>
+                {balanceData ? 'Current credits/balance' : 'Click below to fetch balance'}
+              </small>
+            </div>
+
+            <button
+              type="button"
+              className="button button-outline align-start"
+              disabled={isCheckingBalance}
+              onClick={() => checkBalance()}
+            >
+              <RefreshCw size={14} className={isCheckingBalance ? 'spin' : ''} />
+              {isCheckingBalance ? 'Checking balance…' : 'Check Live Balance'}
+            </button>
+          </div>
+
+          <form className="card settings-card form-stack" onSubmit={handleSendTest}>
+            <div className="card-heading">
+              <div>
+                <h3>Send Test SMS</h3>
+                <p>Deliver a sample message to test gateway connectivity.</p>
+              </div>
+              <Send size={18} style={{ color: '#4779e8' }} />
+            </div>
+
+            <Field label="Recipient phone number" required>
+              <input
+                type="text"
+                placeholder="01XXXXXXXXX"
+                value={testPhone}
+                onChange={(e) => setTestPhone(e.target.value)}
+                required
+              />
+            </Field>
+
+            <Field label="Message body" required>
+              <textarea
+                rows="3"
+                value={testMessage}
+                onChange={(e) => setTestMessage(e.target.value)}
+                placeholder="Type test message…"
+                required
+              />
+            </Field>
+
+            <button
+              type="submit"
+              className="button button-primary align-start"
+              disabled={sendTestMutation.isPending}
+            >
+              <Send size={14} />
+              {sendTestMutation.isPending ? 'Sending test SMS…' : 'Send Test SMS'}
+            </button>
+          </form>
+        </div>
+      </div>
+    </>
+  );
 }
 
 function AllUsers({ currentUser }) {
