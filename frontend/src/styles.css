@@ -26,3 +26,132 @@
 @media(max-width:720px){.sidebar.mobile-open .nav-group-trigger span{display:initial}.sidebar.mobile-open .nav-group-trigger .nav-arrow{display:initial}.sidebar.mobile-open .nav-sub{display:grid}.sidebar.mobile-open .nav-group-trigger{justify-content:flex-start;padding:0 11px}}
 
 .spin{animation:spin 1s linear infinite}
+
+
+/* --- Global Typography Scaling & Font Size System --- */
+body {
+  font-size: 15px;
+  line-height: 1.5;
+}
+td {
+  font-size: 13px !important;
+  padding: 12px 14px !important;
+}
+th {
+  font-size: 11px !important;
+  letter-spacing: 0.6px !important;
+  padding: 12px 14px !important;
+}
+td strong {
+  font-size: 13px !important;
+}
+.student-cell strong, .batch-cell strong {
+  font-size: 13.5px !important;
+}
+.mono {
+  font-size: 12px !important;
+}
+.table-sub, small, .field>span small {
+  font-size: 11px !important;
+}
+.field>span {
+  font-size: 12px !important;
+}
+.field input, .field select, .field textarea, .toolbar-search input, .toolbar-controls select, .table-input, .marks-input {
+  font-size: 13px !important;
+  height: 38px !important;
+}
+.field textarea {
+  height: auto !important;
+}
+.toolbar-search {
+  height: 38px !important;
+}
+.button {
+  font-size: 12.5px !important;
+  min-height: 38px !important;
+  padding: 8px 14px !important;
+}
+.button-small {
+  font-size: 11.5px !important;
+  min-height: 32px !important;
+  padding: 5px 10px !important;
+}
+.side-nav a {
+  font-size: 13.5px !important;
+  height: 44px !important;
+}
+.nav-group-trigger {
+  font-size: 13.5px !important;
+  height: 44px !important;
+}
+.nav-sub-link {
+  font-size: 12.5px !important;
+  height: 36px !important;
+}
+.status-pill, .pill {
+  font-size: 11px !important;
+  padding: 4px 9px !important;
+}
+.card-heading h3 {
+  font-size: 15px !important;
+}
+.card-heading p {
+  font-size: 12px !important;
+}
+.page-heading h2 {
+  font-size: 26px !important;
+}
+.page-heading p {
+  font-size: 13.5px !important;
+}
+.breadcrumbs {
+  font-size: 12px !important;
+}
+.breadcrumbs strong {
+  font-size: 12px !important;
+}
+.topbar-profile strong {
+  font-size: 13px !important;
+}
+.topbar-profile small {
+  font-size: 11px !important;
+}
+.detail-item strong {
+  font-size: 13px !important;
+}
+.detail-item small {
+  font-size: 11.5px !important;
+}
+.eyebrow {
+  font-size: 10.5px !important;
+}
+.form-section-title {
+  font-size: 13px !important;
+}
+.modal-header h3 {
+  font-size: 16px !important;
+}
+
+/* Dynamic Font Size Tiers */
+html[data-font-size="normal"] body { font-size: 14px; }
+html[data-font-size="normal"] td, html[data-font-size="normal"] .field input { font-size: 12px !important; }
+
+html[data-font-size="medium"] body { font-size: 15px; }
+html[data-font-size="medium"] td, html[data-font-size="medium"] .field input { font-size: 13.5px !important; }
+
+html[data-font-size="large"] body { font-size: 16.5px; }
+html[data-font-size="large"] td, html[data-font-size="large"] td strong, html[data-font-size="large"] .field input, html[data-font-size="large"] .field select { font-size: 15px !important; height: 42px !important; }
+html[data-font-size="large"] th { font-size: 12.5px !important; }
+html[data-font-size="large"] .side-nav a, html[data-font-size="large"] .nav-group-trigger { font-size: 14.5px !important; height: 46px !important; }
+html[data-font-size="large"] .nav-sub-link { font-size: 13.5px !important; }
+html[data-font-size="large"] .card-heading h3 { font-size: 17px !important; }
+html[data-font-size="large"] .button { font-size: 14px !important; height: 42px !important; }
+
+html[data-font-size="extra_large"] body { font-size: 18px; }
+html[data-font-size="extra_large"] td, html[data-font-size="extra_large"] td strong, html[data-font-size="extra_large"] .field input, html[data-font-size="extra_large"] .field select { font-size: 16.5px !important; height: 45px !important; }
+html[data-font-size="extra_large"] th { font-size: 14px !important; }
+html[data-font-size="extra_large"] .side-nav a, html[data-font-size="extra_large"] .nav-group-trigger { font-size: 16px !important; height: 50px !important; }
+html[data-font-size="extra_large"] .nav-sub-link { font-size: 14.5px !important; }
+html[data-font-size="extra_large"] .card-heading h3 { font-size: 19px !important; }
+html[data-font-size="extra_large"] .button { font-size: 15.5px !important; height: 45px !important; }

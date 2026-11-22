@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import {
   Activity, ArrowDownToLine, ArrowLeft, BookOpen, CalendarCheck, CalendarDays, ChartNoAxesCombined,
   Check, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, ClipboardList, CreditCard, Eye, EyeOff, GraduationCap, LayoutDashboard,
-  LogOut, Menu, MessageSquare, Plus, RefreshCw, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Sparkles, Trash2, UserPlus, Users, X,
+  LogOut, Menu, MessageSquare, Palette, Plus, RefreshCw, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Sparkles, Trash2, UserPlus, Users, X,
 } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { api, API_ORIGIN, messageFromError, responseData, startSession } from './api.js';
@@ -34,12 +34,16 @@ function App() {
   const [collapsed, setCollapsed] = useState(false);
   const [openMenus, setOpenMenus] = useState({
     User: location.pathname.startsWith('/users'),
+    Appearance: location.pathname.startsWith('/appearance'),
     Settings: location.pathname.startsWith('/settings'),
   });
 
   useEffect(() => {
     if (location.pathname.startsWith('/users')) {
       setOpenMenus((prev) => ({ ...prev, User: true }));
+    }
+    if (location.pathname.startsWith('/appearance')) {
+      setOpenMenus((prev) => ({ ...prev, Appearance: true }));
     }
     if (location.pathname.startsWith('/settings')) {
       setOpenMenus((prev) => ({ ...prev, Settings: true }));
@@ -60,6 +64,7 @@ function App() {
     if (path === '/reports') return 'Reports';
     if (path === '/users') return 'All User';
     if (path === '/users/create') return 'Create New User';
+    if (path.startsWith('/appearance')) return 'Appearance';
     if (path === '/settings') return 'Settings';
     if (path === '/settings/sms') return 'BulkSMSBD Configuration';
     return 'Workspace';
@@ -75,6 +80,30 @@ function App() {
     queryFn: async () => (await api.get('/settings')).data.settings,
     enabled: Boolean(user),
   });
+
+  useEffect(() => {
+    const fontSize = brandSettings?.font_size || 'medium';
+    document.documentElement.setAttribute('data-font-size', fontSize);
+  }, [brandSettings?.font_size]);
+
+  useEffect(() => {
+    if (brandSettings?.favicon_url) {
+      let link = document.querySelector("link[rel*='icon']");
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.href = brandSettings.favicon_url;
+    }
+  }, [brandSettings?.favicon_url]);
+
+  useEffect(() => {
+    if (brandSettings?.institution_name) {
+      document.title = `${brandSettings.institution_name} — Coaching Manager`;
+    }
+  }, [brandSettings?.institution_name]);
+
   const logout = useMutation({
     mutationFn: () => api.post('/auth/logout'),
     onSuccess: () => {
@@ -96,6 +125,13 @@ function App() {
       sublinks: [
         { to: '/users/create', label: 'Create New User', icon: UserPlus },
         { to: '/users', label: 'All User', icon: Users, end: true },
+      ],
+    },
+    {
+      label: 'Appearance',
+      icon: Palette,
+      sublinks: [
+        { to: '/appearance/general', label: 'General', icon: SlidersHorizontal },
       ],
     },
     {
@@ -202,6 +238,8 @@ function App() {
             <Route path="/reports" element={<Reports />} />
             <Route path="/users" element={<AllUsers currentUser={user} />} />
             <Route path="/users/create" element={<CreateUser />} />
+            <Route path="/appearance" element={<Navigate to="/appearance/general" replace />} />
+            <Route path="/appearance/general" element={<AppearanceGeneral brandSettings={brandSettings} />} />
             <Route path="/settings" element={<SettingsPage user={user} />} />
             <Route path="/settings/sms" element={<BulkSmsSettings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
@@ -850,6 +888,198 @@ function TableSkeleton() {
 
 function Toast({ toast }) {
   return <div className={`toast ${toast.kind}`}><span>{toast.kind === 'error' ? <X size={16} /> : <Check size={16} />}</span>{toast.message}</div>;
+}
+
+function AppearanceGeneral({ brandSettings }) {
+  const queryClient = useQueryClient();
+  const { toast, notify } = useToast();
+  const [error, setError] = useState('');
+  const [siteName, setSiteName] = useState(brandSettings?.institution_name || '');
+  const [fontSize, setFontSize] = useState(brandSettings?.font_size || 'medium');
+  const [logoFile, setLogoFile] = useState(null);
+  const [faviconFile, setFaviconFile] = useState(null);
+  const [logoPreview, setLogoPreview] = useState(brandSettings?.logo_url || null);
+  const [faviconPreview, setFaviconPreview] = useState(brandSettings?.favicon_url || null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (brandSettings) {
+      setSiteName(brandSettings.institution_name || '');
+      setFontSize(brandSettings.font_size || 'medium');
+      setLogoPreview(brandSettings.logo_url || null);
+      setFaviconPreview(brandSettings.favicon_url || null);
+    }
+  }, [brandSettings]);
+
+  const handleLogoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setLogoFile(file);
+      setLogoPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleFaviconChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setFaviconFile(file);
+      setFaviconPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleFontSizeChange = (size) => {
+    setFontSize(size);
+    document.documentElement.setAttribute('data-font-size', size);
+  };
+
+  const saveAppearance = async (e) => {
+    e.preventDefault();
+    setError('');
+    setIsSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.append('institution_name', siteName);
+      formData.append('font_size', fontSize);
+      if (logoFile) formData.append('logo', logoFile);
+      if (faviconFile) formData.append('favicon', faviconFile);
+      formData.append('_method', 'PUT');
+
+      const response = await api.post('/settings', formData);
+      queryClient.setQueryData(['settings'], response.data.settings);
+      setLogoFile(null);
+      setFaviconFile(null);
+      notify('Appearance settings saved successfully!');
+    } catch (reason) {
+      setError(messageFromError(reason));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="BRANDING & THEME"
+        title="General Appearance"
+        subtitle="Manage website name, coaching branding, browser tab favicon, and overall interface font size."
+      />
+      {toast && <Toast toast={toast} />}
+      {error && <div className="form-alert">{error}</div>}
+
+      <form onSubmit={saveAppearance} className="settings-grid">
+        <div className="card settings-card form-stack">
+          <div className="card-heading">
+            <div>
+              <h3>Website Branding</h3>
+              <p>Configure the title and visual identities for your institution.</p>
+            </div>
+            <Palette size={20} style={{ color: '#4779e8' }} />
+          </div>
+
+          <Field label="Website / Coaching Name" required>
+            <input
+              type="text"
+              value={siteName}
+              onChange={(e) => setSiteName(e.target.value)}
+              placeholder="e.g. Tabassum English Coaching"
+              required
+            />
+          </Field>
+
+          <Field label="Website Logo">
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              onChange={handleLogoChange}
+            />
+            {logoPreview && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
+                <div style={{ width: 50, height: 50, borderRadius: 12, overflow: 'hidden', background: '#112846', display: 'grid', placeItems: 'center', padding: 4 }}>
+                  <img src={logoPreview} alt="Logo preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                </div>
+                <small style={{ color: '#687b96' }}>Current header & sidebar logo</small>
+              </div>
+            )}
+          </Field>
+
+          <Field label="Browser Favicon (.ico, .png, .svg)">
+            <input
+              type="file"
+              accept="image/x-icon,image/png,image/svg+xml,image/webp"
+              onChange={handleFaviconChange}
+            />
+            {faviconPreview && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 6, overflow: 'hidden', border: '1px solid #e1e7f0', display: 'grid', placeItems: 'center', background: '#fff', padding: 3 }}>
+                  <img src={faviconPreview} alt="Favicon preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                </div>
+                <small style={{ color: '#687b96' }}>Icon displayed in the browser tab</small>
+              </div>
+            )}
+          </Field>
+
+          <button
+            type="submit"
+            className="button button-primary align-start"
+            disabled={isSubmitting}
+            style={{ marginTop: 8 }}
+          >
+            {isSubmitting ? 'Saving appearance…' : 'Save Appearance Settings'}
+          </button>
+        </div>
+
+        <div className="settings-column">
+          <div className="card settings-card form-stack">
+            <div className="card-heading">
+              <div>
+                <h3>Interface Font Size</h3>
+                <p>Select your preferred text scale for the entire website.</p>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gap: 10 }}>
+              {[
+                { id: 'normal', label: 'Normal (14px)', desc: 'Standard compact view for high-DPI displays' },
+                { id: 'medium', label: 'Medium (15px) — Default', desc: 'Comfortable & clean reading experience' },
+                { id: 'large', label: 'Large (16.5px)', desc: 'High visibility, bigger text for tables and inputs' },
+                { id: 'extra_large', label: 'Extra Large (18px)', desc: 'Maximum text scale for effortless viewing' },
+              ].map((opt) => (
+                <label
+                  key={opt.id}
+                  className={`batch-select-card ${fontSize === opt.id ? 'selected' : ''}`}
+                  onClick={() => handleFontSizeChange(opt.id)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <input
+                    type="radio"
+                    name="font_size_choice"
+                    checked={fontSize === opt.id}
+                    onChange={() => handleFontSizeChange(opt.id)}
+                  />
+                  <span>
+                    <strong>{opt.label}</strong>
+                    <small>{opt.desc}</small>
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            <div className="card" style={{ padding: 14, background: '#f8fafc', border: '1px dashed #cbd5e1', marginTop: 6 }}>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', marginBottom: 6, textTransform: 'uppercase' }}>
+                Live Typography Preview
+              </div>
+              <p style={{ margin: '0 0 6px', fontWeight: 600, color: '#1e293b' }}>
+                {siteName || 'ClassDesk Coaching'} — Student Directory
+              </p>
+              <p style={{ margin: 0, color: '#64748b', lineHeight: 1.5 }}>
+                Roll: STD-000001 · Class 10 · English First Paper · Attendance: 95%
+              </p>
+            </div>
+          </div>
+        </div>
+      </form>
+    </>
+  );
 }
 
 function BulkSmsSettings() {
