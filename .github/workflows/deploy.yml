@@ -1,0 +1,69 @@
+name: Deploy to cPanel (One-Push CI/CD)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Build & Deploy to cPanel
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: 2. Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, xml, ctype, iconv, intl, pdo_mysql, bcmath, fileinfo, openssl, zip
+          coverage: none
+
+      - name: 3. Install Composer dependencies
+        run: |
+          composer install --no-dev --prefer-dist --optimize-autoloader --no-progress
+
+      - name: 4. Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 5. Build React frontend & copy to Laravel public
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+          cp -r dist/* ../public/
+          cd ..
+
+      - name: 6. Prepare production folders & FTP includes
+        run: |
+          mkdir -p storage/framework/{sessions,views,cache} storage/logs bootstrap/cache
+          echo "!vendor/" >> .git-ftp-include
+          echo "!public/assets/" >> .git-ftp-include
+          echo "!public/index.html" >> .git-ftp-include
+
+      - name: 7. Deploy files to cPanel
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          server-dir: ${{ secrets.FTP_TARGET_DIR || 'public_html/' }}
+          dry-run: false
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            **/frontend/node_modules/**
+            **/frontend/src/**
+            **/.env
+            **/.env.example
+            **/tests/**
+            **/phpunit.xml
+            **/README.md
