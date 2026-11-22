@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BatchController;
+use App\Http\Controllers\Api\BulkSmsController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ExamController;
 use App\Http\Controllers\Api\FeeController;
@@ -64,6 +65,8 @@ Route::middleware(['auth:sanctum', EnsureAdministrator::class])->group(function 
     Route::put('/settings/sms', [SmsSettingsController::class, 'update']);
     Route::get('/settings/sms/balance', [SmsSettingsController::class, 'balance']);
     Route::post('/settings/sms/test', [SmsSettingsController::class, 'test']);
+    Route::post('/sms/preview', [BulkSmsController::class, 'preview']);
+    Route::post('/sms/send-bulk', [BulkSmsController::class, 'send']);
 
     Route::get('/users', [UserController::class, 'index']);
     Route::post('/users', [UserController::class, 'store']);

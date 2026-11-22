@@ -155,3 +155,188 @@ html[data-font-size="extra_large"] .side-nav a, html[data-font-size="extra_large
 html[data-font-size="extra_large"] .nav-sub-link { font-size: 14.5px !important; }
 html[data-font-size="extra_large"] .card-heading h3 { font-size: 19px !important; }
 html[data-font-size="extra_large"] .button { font-size: 15.5px !important; height: 45px !important; }
+
+/* --- Bulk SMS Operation Styles --- */
+.sms-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #ffffff;
+  border: 1px solid #edf0f5;
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow);
+}
+.sms-balance-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  background: #f0f6ff;
+  border: 1px solid #d4e4fc;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #2952a3;
+}
+.sms-balance-badge strong {
+  font-size: 15px;
+  color: #1a418f;
+}
+.sms-audience-selector {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.sms-choice-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1.5px solid #e5e9f0;
+  border-radius: 9px;
+  cursor: pointer;
+  background: #fff;
+  transition: all 0.15s ease;
+}
+.sms-choice-card:hover {
+  border-color: #9cbbf7;
+  background: #fbfdff;
+}
+.sms-choice-card.active {
+  border-color: #4779e8;
+  background: #f4f8ff;
+  box-shadow: 0 2px 8px rgba(71, 121, 232, 0.12);
+}
+.sms-choice-card input[type="radio"],
+.sms-choice-card input[type="checkbox"] {
+  margin-top: 3px;
+  accent-color: #4779e8;
+  width: 16px;
+  height: 16px;
+}
+.sms-choice-content strong {
+  display: block;
+  font-size: 13.5px;
+  color: #1c2b43;
+  margin-bottom: 2px;
+}
+.sms-choice-content small {
+  display: block;
+  font-size: 11.5px;
+  color: #7b889b;
+  line-height: 1.4;
+}
+.sms-recipients-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+.sms-tag-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #f6f8fb;
+  border: 1px solid #e7ecf3;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+.sms-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  background: #ffffff;
+  border: 1px solid #d7e0ec;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3b5fa0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.sms-tag-chip:hover {
+  background: #ebf2fd;
+  border-color: #9ab9ec;
+  color: #204b96;
+  transform: translateY(-1px);
+}
+.sms-tag-chip span {
+  font-size: 10.5px;
+  color: #7f95b7;
+  font-weight: normal;
+}
+.sms-counter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1px solid #e9edf3;
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+.sms-preview-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.sms-preview-stat {
+  background: #f8fafd;
+  border: 1px solid #e7edf6;
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+}
+.sms-preview-stat small {
+  display: block;
+  font-size: 11px;
+  color: #7f8e9e;
+  margin-bottom: 4px;
+}
+.sms-preview-stat strong {
+  display: block;
+  font-size: 18px;
+  color: #1b2e4b;
+}
+.sms-preview-item {
+  background: #ffffff;
+  border: 1px solid #e6ebf2;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.sms-preview-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.sms-bubble {
+  background: #f1f5fa;
+  border: 1px solid #e1e7f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #1e293b;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+@media (max-width: 768px) {
+  .sms-audience-selector,
+  .sms-recipients-grid,
+  .sms-preview-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}

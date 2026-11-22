@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
-  Activity, ArrowDownToLine, ArrowLeft, BookOpen, CalendarCheck, CalendarDays, ChartNoAxesCombined,
+  Activity, AlertCircle, ArrowDownToLine, ArrowLeft, BookOpen, CalendarCheck, CalendarDays, ChartNoAxesCombined,
   Check, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, ClipboardList, CreditCard, Eye, EyeOff, GraduationCap, LayoutDashboard,
   LogOut, Menu, MessageSquare, Palette, Plus, RefreshCw, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Sparkles, Trash2, UserPlus, Users, X,
 } from 'lucide-react';
@@ -33,6 +33,7 @@ function App() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const getActiveMenuFromPath = (path) => {
+    if (path.startsWith('/sms')) return 'SMS Operation';
     if (path.startsWith('/users')) return 'User';
     if (path.startsWith('/appearance')) return 'Appearance';
     if (path.startsWith('/settings')) return 'Settings';
@@ -60,6 +61,8 @@ function App() {
     if (path.includes('/marks')) return 'Marks entry';
     if (path === '/results') return 'Results';
     if (path === '/reports') return 'Reports';
+    if (path === '/sms/bulk') return 'Bulk SMS';
+    if (path.startsWith('/sms')) return 'SMS Operation';
     if (path === '/users') return 'All User';
     if (path === '/users/create') return 'Create New User';
     if (path.startsWith('/appearance')) return 'Appearance';
@@ -117,6 +120,13 @@ function App() {
     { to: '/fees', label: 'Fees & income', icon: CreditCard },
     { to: '/exams', label: 'Exams & results', icon: ClipboardList },
     { to: '/reports', label: 'Reports', icon: ChartNoAxesCombined },
+    {
+      label: 'SMS Operation',
+      icon: Send,
+      sublinks: [
+        { to: '/sms/bulk', label: 'Bulk SMS', icon: Send },
+      ],
+    },
     {
       label: 'User',
       icon: ShieldCheck,
@@ -212,7 +222,6 @@ function App() {
           })}
         </nav>
         <div className="sidebar-bottom">
-          <div className="help-card"><div className="help-icon"><CircleHelp size={17} /></div><strong>Need a hand?</strong><span>Visit the quick guide for help getting started.</span><button onClick={() => window.open('https://laravel.com/docs', '_blank')}>Open quick guide <ChevronRight size={14} /></button></div>
           <div className="sidebar-user"><span className="avatar avatar-small">{initials(user.name)}</span><span className="sidebar-user-copy"><strong>{user.name}</strong><small>Administrator</small></span><button className="icon-button" aria-label="Sign out" onClick={() => logout.mutate()}><LogOut size={17} /></button></div>
         </div>
       </aside>
@@ -243,6 +252,8 @@ function App() {
             <Route path="/exams/:id/marks" element={<MarksEntry />} />
             <Route path="/results" element={<Results />} />
             <Route path="/reports" element={<Reports />} />
+            <Route path="/sms" element={<Navigate to="/sms/bulk" replace />} />
+            <Route path="/sms/bulk" element={<BulkSmsPage />} />
             <Route path="/users" element={<AllUsers currentUser={user} />} />
             <Route path="/users/create" element={<CreateUser />} />
             <Route path="/appearance" element={<Navigate to="/appearance/general" replace />} />
@@ -1321,6 +1332,685 @@ function BulkSmsSettings() {
           </form>
         </div>
       </div>
+    </>
+  );
+}
+
+function BulkSmsPage() {
+  const queryClient = useQueryClient();
+  const { toast, notify } = useToast();
+  const textareaRef = useRef(null);
+
+  const [targetType, setTargetType] = useState('all'); // 'all' | 'batch'
+  const [selectedBatches, setSelectedBatches] = useState([]);
+  const [recipients, setRecipients] = useState({
+    student: true,
+    father: false,
+    mother: false,
+  });
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [sendResult, setSendResult] = useState(null);
+
+  // Preview Modal state
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewData, setPreviewData] = useState(null);
+  const [isSending, setIsSending] = useState(false);
+
+  // Settings & balance queries
+  const { data: smsSettings } = useQuery({
+    queryKey: ['sms-settings'],
+    queryFn: async () => (await api.get('/settings/sms')).data.settings,
+  });
+
+  const { data: balanceData, refetch: refetchBalance, isFetching: isCheckingBalance } = useQuery({
+    queryKey: ['sms-balance'],
+    queryFn: async () => (await api.get('/settings/sms/balance')).data,
+    retry: false,
+  });
+
+  const { data: batchesData, isLoading: isLoadingBatches } = useQuery({
+    queryKey: ['batches-all'],
+    queryFn: async () => (await api.get('/batches')).data,
+  });
+
+  const batches = batchesData?.data || [];
+
+  // Unicode detection and SMS length calculator
+  const isUnicode = Array.from(message).some((char) => char.charCodeAt(0) > 127);
+  const charLength = message.length;
+  const smsParts = charLength === 0 ? 0 : (isUnicode ? (charLength <= 70 ? 1 : Math.ceil(charLength / 67)) : (charLength <= 160 ? 1 : Math.ceil(charLength / 153)));
+
+  const insertTag = (tag) => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      setMessage((prev) => prev + tag);
+      return;
+    }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const before = message.substring(0, start);
+    const after = message.substring(end);
+    const next = before + tag + after;
+    setMessage(next);
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + tag.length, start + tag.length);
+    }, 0);
+  };
+
+  const handleToggleBatch = (id) => {
+    setSelectedBatches((prev) =>
+      prev.includes(id) ? prev.filter((bId) => bId !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllBatches = () => {
+    if (selectedBatches.length === batches.length) {
+      setSelectedBatches([]);
+    } else {
+      setSelectedBatches(batches.map((b) => b.id));
+    }
+  };
+
+  const activeRecipientTypes = Object.entries(recipients)
+    .filter(([_, enabled]) => enabled)
+    .map(([type]) => type);
+
+  const handleOpenPreview = async () => {
+    setError('');
+    setSendResult(null);
+
+    if (!message.trim()) {
+      setError('Please write your SMS message before previewing or sending.');
+      return;
+    }
+
+    if (activeRecipientTypes.length === 0) {
+      setError('Please select at least one recipient type (Student, Father, or Mother).');
+      return;
+    }
+
+    if (targetType === 'batch' && selectedBatches.length === 0) {
+      setError('Please select at least one batch when using batch-wise SMS.');
+      return;
+    }
+
+    setPreviewLoading(true);
+    try {
+      const res = await api.post('/sms/preview', {
+        target_type: targetType,
+        batch_ids: targetType === 'batch' ? selectedBatches : [],
+        recipients: activeRecipientTypes,
+        message: message.trim(),
+      });
+      setPreviewData(res.data);
+      setPreviewOpen(true);
+    } catch (err) {
+      setError(messageFromError(err));
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleConfirmSend = async () => {
+    setIsSending(true);
+    setError('');
+    try {
+      const res = await api.post('/sms/send-bulk', {
+        target_type: targetType,
+        batch_ids: targetType === 'batch' ? selectedBatches : [],
+        recipients: activeRecipientTypes,
+        message: message.trim(),
+      });
+      setPreviewOpen(false);
+      setSendResult(res.data);
+      notify(res.data.message || 'SMS broadcast dispatched successfully!');
+      queryClient.invalidateQueries({ queryKey: ['sms-balance'] });
+    } catch (err) {
+      setError(messageFromError(err));
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="SMS OPERATION"
+        title="Bulk SMS Dispatch"
+        subtitle="Send broadcast or personalized SMS to all students, specific batches, and their parents."
+        action={
+          <Link className="button button-outline" to="/settings/sms">
+            <Settings size={15} /> SMS Gateway Config
+          </Link>
+        }
+      />
+
+      {toast && <Toast toast={toast} />}
+
+      {/* Gateway Balance Strip */}
+      <div className="sms-banner">
+        <div>
+          <strong style={{ fontSize: '14px', color: '#1c2b43', display: 'block', marginBottom: '2px' }}>
+            BulkSMSBD Gateway Status
+          </strong>
+          <small style={{ fontSize: '12px', color: '#7a899e' }}>
+            {smsSettings?.is_configured
+              ? `Sender ID: ${smsSettings.sender_id || 'Configured'}`
+              : 'BulkSMSBD gateway is not configured yet. Please configure it in Settings.'}
+          </small>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {balanceData?.balance !== undefined ? (
+            <div className="sms-balance-badge">
+              <span>SMS Balance:</span>
+              <strong>৳ {balanceData.balance}</strong>
+            </div>
+          ) : (
+            <div className="sms-balance-badge" style={{ background: '#f5f7fa', borderColor: '#e2e7ef', color: '#68778f' }}>
+              <span>Balance:</span>
+              <strong>{balanceData?.error_message || '—'}</strong>
+            </div>
+          )}
+
+          <button
+            type="button"
+            className="button button-quiet button-small"
+            onClick={() => refetchBalance()}
+            disabled={isCheckingBalance}
+            title="Refresh SMS Balance"
+          >
+            <RefreshCw size={13} className={isCheckingBalance ? 'spin' : ''} />
+            {isCheckingBalance ? 'Checking…' : 'Refresh'}
+          </button>
+        </div>
+      </div>
+
+      {error && <div className="form-alert">{error}</div>}
+
+      {sendResult && (
+        <div
+          className="card"
+          style={{
+            padding: '16px 20px',
+            marginBottom: '20px',
+            borderLeft: `4px solid ${sendResult.success ? '#1b9b70' : '#e65c5c'}`,
+            background: sendResult.success ? '#f2fbf7' : '#fff5f5',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <strong style={{ color: sendResult.success ? '#1b9b70' : '#ca4141', fontSize: '14px' }}>
+                {sendResult.success ? 'SMS Broadcast Completed' : 'SMS Broadcast Incomplete'}
+              </strong>
+              <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: '#526279' }}>{sendResult.message}</p>
+            </div>
+            <button
+              type="button"
+              className="button button-quiet button-small"
+              onClick={() => setSendResult(null)}
+            >
+              <X size={14} /> Close
+            </button>
+          </div>
+          {sendResult.errors && sendResult.errors.length > 0 && (
+            <div style={{ marginTop: '10px', fontSize: '12px', color: '#b33939' }}>
+              <strong>Notice details:</strong>
+              <ul style={{ margin: '4px 0 0', paddingLeft: '18px' }}>
+                {sendResult.errors.map((err, idx) => (
+                  <li key={idx}>{err}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="settings-grid">
+        <div className="settings-card">
+          {/* Step 1: Target Audience */}
+          <div className="card-heading">
+            <div>
+              <h3>1. Target Audience</h3>
+              <p>Choose whether to send to all active students or specific batches.</p>
+            </div>
+          </div>
+
+          <div className="sms-audience-selector">
+            <label
+              className={`sms-choice-card ${targetType === 'all' ? 'active' : ''}`}
+              onClick={() => setTargetType('all')}
+            >
+              <input
+                type="radio"
+                name="target_type"
+                value="all"
+                checked={targetType === 'all'}
+                onChange={() => setTargetType('all')}
+              />
+              <div className="sms-choice-content">
+                <strong>All Students</strong>
+                <small>Send to all active students enrolled across the entire institution.</small>
+              </div>
+            </label>
+
+            <label
+              className={`sms-choice-card ${targetType === 'batch' ? 'active' : ''}`}
+              onClick={() => setTargetType('batch')}
+            >
+              <input
+                type="radio"
+                name="target_type"
+                value="batch"
+                checked={targetType === 'batch'}
+                onChange={() => setTargetType('batch')}
+              />
+              <div className="sms-choice-content">
+                <strong>Batch Wise</strong>
+                <small>Filter students by specific batch or class groups.</small>
+              </div>
+            </label>
+          </div>
+
+          {targetType === 'batch' && (
+            <div
+              style={{
+                background: '#f8fafc',
+                border: '1px solid #e7edf5',
+                borderRadius: '8px',
+                padding: '14px',
+                marginBottom: '16px',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: '10px',
+                }}
+              >
+                <span style={{ fontSize: '12px', fontWeight: 650, color: '#33435a' }}>
+                  Select Batches ({selectedBatches.length} of {batches.length} selected):
+                </span>
+                <button
+                  type="button"
+                  className="button button-quiet button-small"
+                  onClick={handleSelectAllBatches}
+                >
+                  {selectedBatches.length === batches.length ? 'Deselect All' : 'Select All'}
+                </button>
+              </div>
+
+              {isLoadingBatches ? (
+                <div style={{ fontSize: '12px', color: '#7e8ea2', padding: '10px 0' }}>Loading batches…</div>
+              ) : batches.length === 0 ? (
+                <div style={{ fontSize: '12px', color: '#7e8ea2', padding: '10px 0' }}>No active batches found.</div>
+              ) : (
+                <div className="batch-select-grid" style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                  {batches.map((batch) => {
+                    const isChecked = selectedBatches.includes(batch.id);
+                    return (
+                      <label
+                        key={batch.id}
+                        className={`batch-select-card ${isChecked ? 'selected' : ''}`}
+                        style={{ padding: '8px 10px' }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => handleToggleBatch(batch.id)}
+                        />
+                        <span>
+                          <strong>{batch.name}</strong>
+                          <small>{batch.code} {batch.subject ? `• ${batch.subject}` : ''}</small>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 2: Recipients Selection */}
+          <div className="card-heading" style={{ marginTop: '10px' }}>
+            <div>
+              <h3>2. Recipients (Who receives the SMS)</h3>
+              <p>Select which contacts will receive the message for each student.</p>
+            </div>
+          </div>
+
+          <div className="sms-recipients-grid">
+            <label className={`sms-choice-card ${recipients.student ? 'active' : ''}`}>
+              <input
+                type="checkbox"
+                checked={recipients.student}
+                onChange={(e) => setRecipients({ ...recipients, student: e.target.checked })}
+              />
+              <div className="sms-choice-content">
+                <strong>🎓 Student</strong>
+                <small>Student’s personal mobile number.</small>
+              </div>
+            </label>
+
+            <label className={`sms-choice-card ${recipients.father ? 'active' : ''}`}>
+              <input
+                type="checkbox"
+                checked={recipients.father}
+                onChange={(e) => setRecipients({ ...recipients, father: e.target.checked })}
+              />
+              <div className="sms-choice-content">
+                <strong>👨 Father</strong>
+                <small>Father’s contact mobile number.</small>
+              </div>
+            </label>
+
+            <label className={`sms-choice-card ${recipients.mother ? 'active' : ''}`}>
+              <input
+                type="checkbox"
+                checked={recipients.mother}
+                onChange={(e) => setRecipients({ ...recipients, mother: e.target.checked })}
+              />
+              <div className="sms-choice-content">
+                <strong>👩 Mother</strong>
+                <small>Mother’s contact mobile number.</small>
+              </div>
+            </label>
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginTop: '10px',
+              padding: '6px 2px',
+              flexWrap: 'wrap',
+              gap: '8px',
+            }}
+          >
+            <small style={{ fontSize: '11.5px', color: '#7e8fa4' }}>
+              * Missing or empty phone numbers will be automatically skipped.
+            </small>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button
+                type="button"
+                className="button button-quiet button-small"
+                onClick={() => setRecipients({ student: true, father: true, mother: true })}
+              >
+                Select Everyone
+              </button>
+              <button
+                type="button"
+                className="button button-quiet button-small"
+                onClick={() => setRecipients({ student: true, father: false, mother: false })}
+              >
+                Student Only
+              </button>
+              <button
+                type="button"
+                className="button button-quiet button-small"
+                onClick={() => setRecipients({ student: false, father: true, mother: true })}
+              >
+                Parents Only
+              </button>
+            </div>
+          </div>
+
+          {/* Step 3: Message Textarea & Dynamic Tags */}
+          <div className="card-heading" style={{ marginTop: '16px' }}>
+            <div>
+              <h3>3. SMS Message & Dynamic Tags</h3>
+              <p>Type your message. Click any tag below to insert personalized student information.</p>
+            </div>
+          </div>
+
+          {/* Tag Toolbar */}
+          <div className="sms-tag-toolbar">
+            <span style={{ fontSize: '11.5px', fontWeight: 650, color: '#4a5b73', marginRight: '4px' }}>
+              Insert Tag:
+            </span>
+            <button
+              type="button"
+              className="sms-tag-chip"
+              onClick={() => insertTag('{student_name}')}
+              title="Insert student's full name"
+            >
+              + {'{student_name}'} <span>(Name)</span>
+            </button>
+            <button
+              type="button"
+              className="sms-tag-chip"
+              onClick={() => insertTag('{batch_name}')}
+              title="Insert student's batch name"
+            >
+              + {'{batch_name}'} <span>(Batch)</span>
+            </button>
+            <button
+              type="button"
+              className="sms-tag-chip"
+              onClick={() => insertTag('{father_name}')}
+              title="Insert father's name"
+            >
+              + {'{father_name}'} <span>(Father)</span>
+            </button>
+            <button
+              type="button"
+              className="sms-tag-chip"
+              onClick={() => insertTag('{mother_name}')}
+              title="Insert mother's name"
+            >
+              + {'{mother_name}'} <span>(Mother)</span>
+            </button>
+            <button
+              type="button"
+              className="sms-tag-chip"
+              onClick={() => insertTag('{school_name}')}
+              title="Insert school name"
+            >
+              + {'{school_name}'} <span>(School)</span>
+            </button>
+            <button
+              type="button"
+              className="sms-tag-chip"
+              onClick={() => insertTag('{roll_number}')}
+              title="Insert roll number"
+            >
+              + {'{roll_number}'} <span>(Roll)</span>
+            </button>
+          </div>
+
+          <div style={{ position: 'relative' }}>
+            <textarea
+              ref={textareaRef}
+              rows={5}
+              placeholder="e.g. Dear {student_name}, your class for {batch_name} will be held tomorrow at 4:00 PM. Best regards, Tabassum English."
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px 14px',
+                borderRadius: '8px 8px 0 0',
+                border: '1px solid #e3e8ef',
+                borderBottom: 0,
+                fontSize: '13.5px',
+                lineHeight: 1.6,
+                minHeight: '120px',
+                outline: 'none',
+              }}
+            />
+            <div className="sms-counter-bar">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span className={`status-pill ${isUnicode ? 'excused' : 'active'}`}>
+                  {isUnicode ? '📝 Bangla / Unicode' : '🔤 Standard English (GSM)'}
+                </span>
+                <span>
+                  Limit: <strong>{isUnicode ? '70' : '160'}</strong> chars/SMS
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span>
+                  Length: <strong>{charLength}</strong> characters
+                </span>
+                <span>
+                  Credits: <strong>{smsParts} SMS</strong>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+            <button
+              type="button"
+              className="button button-primary"
+              style={{ padding: '10px 22px', fontSize: '13.5px' }}
+              disabled={previewLoading || !message.trim()}
+              onClick={handleOpenPreview}
+            >
+              <Send size={15} />
+              {previewLoading ? 'Generating Preview…' : 'Review & Send SMS'}
+            </button>
+          </div>
+        </div>
+
+        {/* Right Column: Personalization Guide */}
+        <div className="settings-column">
+          <div className="card settings-card">
+            <div className="card-heading">
+              <div>
+                <h3>Personalization Guide</h3>
+                <p>How dynamic tags work during bulk delivery</p>
+              </div>
+              <Sparkles size={18} style={{ color: '#4779e8' }} />
+            </div>
+
+            <div style={{ display: 'grid', gap: '10px', fontSize: '12px', color: '#526279', lineHeight: 1.6 }}>
+              <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: '7px', border: '1px solid #edf2f7' }}>
+                <strong style={{ color: '#2c3e55', display: 'block', marginBottom: '2px' }}>{'{student_name}'}</strong>
+                Replaced with each student's registered full name.
+              </div>
+              <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: '7px', border: '1px solid #edf2f7' }}>
+                <strong style={{ color: '#2c3e55', display: 'block', marginBottom: '2px' }}>{'{batch_name}'}</strong>
+                Replaced with the student's active batch title (e.g. "HSC 2026").
+              </div>
+              <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: '7px', border: '1px solid #edf2f7' }}>
+                <strong style={{ color: '#2c3e55', display: 'block', marginBottom: '2px' }}>{'{father_name}'} & {'{mother_name}'}</strong>
+                Replaced with father's or mother's name.
+              </div>
+              <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: '7px', border: '1px solid #edf2f7' }}>
+                <strong style={{ color: '#2c3e55', display: 'block', marginBottom: '2px' }}>{'{school_name}'}</strong>
+                Replaced with student's school or college name.
+              </div>
+            </div>
+
+            <div className="info-note" style={{ marginTop: '10px' }}>
+              <strong>BulkSMSBD Encoding:</strong>
+              <p style={{ margin: '3px 0 0' }}>
+                Messages with Bangla characters are sent as Unicode (70 chars per SMS). Standard English messages use 160 characters per SMS.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Live Preview & Confirmation Modal */}
+      {previewOpen && previewData && (
+        <Modal
+          title="Review & Confirm Bulk SMS"
+          wide={true}
+          onClose={() => {
+            if (!isSending) setPreviewOpen(false);
+          }}
+        >
+          <div className="sms-preview-summary-grid">
+            <div className="sms-preview-stat">
+              <small>Target Students</small>
+              <strong>{previewData.total_students}</strong>
+            </div>
+            <div className="sms-preview-stat">
+              <small>Total Recipients</small>
+              <strong>{previewData.total_recipients}</strong>
+            </div>
+            <div className="sms-preview-stat">
+              <small>Unique Numbers</small>
+              <strong>{previewData.unique_phone_count}</strong>
+            </div>
+            <div className="sms-preview-stat">
+              <small>SMS Per Person</small>
+              <strong style={{ color: '#4779e8' }}>
+                {previewData.sms_parts} SMS ({previewData.is_unicode ? 'Unicode' : 'GSM'})
+              </strong>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '14px' }}>
+            <strong style={{ fontSize: '13px', color: '#1c2c44', display: 'block', marginBottom: '4px' }}>
+              Personalized Message Samples ({previewData.samples?.length || 0} sample previews)
+            </strong>
+            <p style={{ fontSize: '12px', color: '#778699', margin: '0 0 12px' }}>
+              This is how your message will appear when delivered to students and parents with their dynamic data:
+            </p>
+
+            <div style={{ maxHeight: '280px', overflowY: 'auto', display: 'grid', gap: '10px' }}>
+              {previewData.samples && previewData.samples.length > 0 ? (
+                previewData.samples.map((sample, idx) => (
+                  <div key={idx} className="sms-preview-item">
+                    <div className="sms-preview-item-header">
+                      <div>
+                        <strong>{sample.student_name}</strong>
+                        {sample.school_name ? ` • ${sample.school_name}` : ''}
+                        {sample.batch_names ? ` (${sample.batch_names})` : ''}
+                      </div>
+                      <span className="pill pill-blue">
+                        {sample.recipient_type}: {sample.phone}
+                      </span>
+                    </div>
+                    <div className="sms-bubble">{sample.message}</div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                      <small style={{ fontSize: '11px', color: '#8897a8' }}>
+                        Length: {sample.char_count} chars
+                      </small>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="empty-state" style={{ minHeight: '120px' }}>
+                  <p>No valid phone numbers found for the selected students.</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="modal-actions" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '12px', color: '#68778d' }}>
+              Ready to send via BulkSMSBD API.
+            </span>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                className="button button-outline"
+                disabled={isSending}
+                onClick={() => setPreviewOpen(false)}
+              >
+                Back to Edit
+              </button>
+              <button
+                type="button"
+                className="button button-primary"
+                disabled={isSending || previewData.total_recipients === 0}
+                onClick={handleConfirmSend}
+              >
+                <Send size={15} />
+                {isSending ? 'Sending SMS Broadcast…' : `Confirm & Send (${previewData.total_recipients} Recipients)`}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }
