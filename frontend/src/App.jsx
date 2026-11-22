@@ -32,21 +32,19 @@ function App() {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [openMenus, setOpenMenus] = useState({
-    User: location.pathname.startsWith('/users'),
-    Appearance: location.pathname.startsWith('/appearance'),
-    Settings: location.pathname.startsWith('/settings'),
-  });
+  const getActiveMenuFromPath = (path) => {
+    if (path.startsWith('/users')) return 'User';
+    if (path.startsWith('/appearance')) return 'Appearance';
+    if (path.startsWith('/settings')) return 'Settings';
+    return null;
+  };
+
+  const [openMenu, setOpenMenu] = useState(getActiveMenuFromPath(location.pathname));
 
   useEffect(() => {
-    if (location.pathname.startsWith('/users')) {
-      setOpenMenus((prev) => ({ ...prev, User: true }));
-    }
-    if (location.pathname.startsWith('/appearance')) {
-      setOpenMenus((prev) => ({ ...prev, Appearance: true }));
-    }
-    if (location.pathname.startsWith('/settings')) {
-      setOpenMenus((prev) => ({ ...prev, Settings: true }));
+    const matched = getActiveMenuFromPath(location.pathname);
+    if (matched) {
+      setOpenMenu(matched);
     }
   }, [location.pathname]);
 
@@ -159,7 +157,7 @@ function App() {
         <nav className="side-nav">
           {links.map((item) => {
             if (item.sublinks) {
-              const isMenuOpen = Boolean(openMenus[item.label]);
+              const isMenuOpen = openMenu === item.label;
               const isGroupActive = item.sublinks.some((sub) => sub.end ? location.pathname === sub.to : location.pathname.startsWith(sub.to));
               return (
                 <div key={item.label} className="nav-group">
@@ -168,7 +166,7 @@ function App() {
                     className={`nav-group-trigger ${isGroupActive ? 'active-parent' : ''}`}
                     onClick={() => {
                       if (collapsed) setCollapsed(false);
-                      setOpenMenus((prev) => ({ ...prev, [item.label]: !prev[item.label] }));
+                      setOpenMenu((current) => (current === item.label ? null : item.label));
                     }}
                     title={collapsed ? item.label : undefined}
                   >
@@ -198,7 +196,16 @@ function App() {
             }
 
             return (
-              <NavLink key={item.to} to={item.to} end={item.end} onClick={() => setMobileOpen(false)} title={collapsed ? item.label : undefined}>
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                onClick={() => {
+                  setMobileOpen(false);
+                  setOpenMenu(null);
+                }}
+                title={collapsed ? item.label : undefined}
+              >
                 <item.icon size={19} strokeWidth={1.8} /><span>{item.label}</span>{item.label === 'Students' && <span className="nav-dot" />}
               </NavLink>
             );
