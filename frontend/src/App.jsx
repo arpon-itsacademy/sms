@@ -1348,6 +1348,9 @@ function BulkSmsPage() {
     father: false,
     mother: false,
   });
+  const [batchDropdownOpen, setBatchDropdownOpen] = useState(false);
+  const [batchSearch, setBatchSearch] = useState('');
+  const [recipientDropdownOpen, setRecipientDropdownOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [sendResult, setSendResult] = useState(null);
@@ -1570,8 +1573,19 @@ function BulkSmsPage() {
       )}
 
       <div className="settings-grid">
-        <div className="settings-card">
-          {/* Step 1: Target Audience */}
+        <div className="settings-card" style={{ position: 'relative' }}>
+          {/* Transparent Backdrop to close open dropdowns on outside click */}
+          {(batchDropdownOpen || recipientDropdownOpen) && (
+            <div
+              style={{ position: 'fixed', inset: 0, zIndex: 35 }}
+              onClick={() => {
+                setBatchDropdownOpen(false);
+                setRecipientDropdownOpen(false);
+              }}
+            />
+          )}
+
+          {/* Step 1: Target Audience Dropdown */}
           <div className="card-heading">
             <div>
               <h3>1. Target Audience</h3>
@@ -1579,104 +1593,177 @@ function BulkSmsPage() {
             </div>
           </div>
 
-          <div className="sms-audience-selector">
-            <label
-              className={`sms-choice-card ${targetType === 'all' ? 'active' : ''}`}
-              onClick={() => setTargetType('all')}
-            >
-              <input
-                type="radio"
-                name="target_type"
-                value="all"
-                checked={targetType === 'all'}
-                onChange={() => setTargetType('all')}
-              />
-              <div className="sms-choice-content">
-                <strong>All Students</strong>
-                <small>Send to all active students enrolled across the entire institution.</small>
-              </div>
+          <div className="field" style={{ marginBottom: '16px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 600, color: '#4a5970', marginBottom: '6px', display: 'block' }}>
+              Target Audience Dropdown
             </label>
-
-            <label
-              className={`sms-choice-card ${targetType === 'batch' ? 'active' : ''}`}
-              onClick={() => setTargetType('batch')}
-            >
-              <input
-                type="radio"
-                name="target_type"
-                value="batch"
-                checked={targetType === 'batch'}
-                onChange={() => setTargetType('batch')}
-              />
-              <div className="sms-choice-content">
-                <strong>Batch Wise</strong>
-                <small>Filter students by specific batch or class groups.</small>
-              </div>
-            </label>
-          </div>
-
-          {targetType === 'batch' && (
-            <div
+            <select
+              value={targetType}
+              onChange={(e) => {
+                setTargetType(e.target.value);
+                setBatchDropdownOpen(false);
+              }}
               style={{
-                background: '#f8fafc',
-                border: '1px solid #e7edf5',
+                width: '100%',
+                height: '42px',
+                fontSize: '13.5px',
                 borderRadius: '8px',
-                padding: '14px',
-                marginBottom: '16px',
+                border: '1.5px solid #dbe2ea',
+                padding: '0 12px',
+                background: '#fff',
+                color: '#1c2b43',
+                fontWeight: 500,
               }}
             >
-              <div
+              <option value="all">👥 All Students (Send to all active students in institution)</option>
+              <option value="batch">📚 Batch Wise (Filter and select specific batches)</option>
+            </select>
+          </div>
+
+          {/* Select Batches: Multi-Select Dropdown */}
+          {targetType === 'batch' && (
+            <div className="field" style={{ position: 'relative', marginBottom: '16px', zIndex: batchDropdownOpen ? 40 : 2 }}>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: '#4a5970', marginBottom: '6px', display: 'block' }}>
+                Select Batches ({selectedBatches.length} of {batches.length} selected)
+              </label>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setRecipientDropdownOpen(false);
+                  setBatchDropdownOpen((prev) => !prev);
+                }}
                 style={{
+                  width: '100%',
+                  minHeight: '42px',
+                  padding: '8px 14px',
+                  borderRadius: '8px',
+                  border: `1.5px solid ${batchDropdownOpen ? '#4779e8' : '#dbe2ea'}`,
+                  background: '#fff',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  marginBottom: '10px',
+                  gap: '10px',
+                  fontSize: '13.5px',
+                  color: selectedBatches.length === 0 ? '#8b98a9' : '#1e293b',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  boxShadow: batchDropdownOpen ? '0 0 0 3px rgba(71, 121, 232, 0.15)' : 'none',
+                  transition: 'all 0.15s ease',
                 }}
               >
-                <span style={{ fontSize: '12px', fontWeight: 650, color: '#33435a' }}>
-                  Select Batches ({selectedBatches.length} of {batches.length} selected):
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  {selectedBatches.length === batches.length && batches.length > 0 ? (
+                    <span style={{ fontWeight: 600, color: '#2752a7' }}>All Batches Selected ({batches.length})</span>
+                  ) : selectedBatches.length === 0 ? (
+                    <span>Select Batches (0 of {batches.length} selected)...</span>
+                  ) : (
+                    <span>
+                      <strong style={{ color: '#2752a7' }}>{selectedBatches.length} selected: </strong>
+                      {batches.filter((b) => selectedBatches.includes(b.id)).map((b) => b.name).join(', ')}
+                    </span>
+                  )}
                 </span>
-                <button
-                  type="button"
-                  className="button button-quiet button-small"
-                  onClick={handleSelectAllBatches}
-                >
-                  {selectedBatches.length === batches.length ? 'Deselect All' : 'Select All'}
-                </button>
-              </div>
+                <ChevronDown size={16} style={{ transform: batchDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0 }} />
+              </button>
 
-              {isLoadingBatches ? (
-                <div style={{ fontSize: '12px', color: '#7e8ea2', padding: '10px 0' }}>Loading batches…</div>
-              ) : batches.length === 0 ? (
-                <div style={{ fontSize: '12px', color: '#7e8ea2', padding: '10px 0' }}>No active batches found.</div>
-              ) : (
-                <div className="batch-select-grid" style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                  {batches.map((batch) => {
-                    const isChecked = selectedBatches.includes(batch.id);
-                    return (
-                      <label
-                        key={batch.id}
-                        className={`batch-select-card ${isChecked ? 'selected' : ''}`}
-                        style={{ padding: '8px 10px' }}
+              {batchDropdownOpen && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 4px)',
+                    left: 0,
+                    right: 0,
+                    zIndex: 50,
+                    background: '#ffffff',
+                    border: '1.5px solid #dbe2ea',
+                    borderRadius: '9px',
+                    boxShadow: '0 10px 30px rgba(20, 36, 61, 0.15)',
+                    padding: '12px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '10px' }}>
+                    <input
+                      type="text"
+                      placeholder="Search batches…"
+                      value={batchSearch}
+                      onChange={(e) => setBatchSearch(e.target.value)}
+                      style={{
+                        flex: 1,
+                        height: '34px',
+                        fontSize: '12.5px',
+                        border: '1px solid #dbe2ea',
+                        borderRadius: '6px',
+                        padding: '0 10px',
+                        outline: 'none',
+                      }}
+                    />
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        type="button"
+                        className="button button-quiet button-small"
+                        onClick={handleSelectAllBatches}
                       >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => handleToggleBatch(batch.id)}
-                        />
-                        <span>
-                          <strong>{batch.name}</strong>
-                          <small>{batch.code} {batch.subject ? `• ${batch.subject}` : ''}</small>
-                        </span>
-                      </label>
-                    );
-                  })}
+                        {selectedBatches.length === batches.length ? 'Deselect All' : 'Select All'}
+                      </button>
+                      <button
+                        type="button"
+                        className="button button-quiet button-small"
+                        onClick={() => setBatchDropdownOpen(false)}
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ maxHeight: '220px', overflowY: 'auto', display: 'grid', gap: '6px' }}>
+                    {isLoadingBatches ? (
+                      <div style={{ fontSize: '12px', color: '#7e8ea2', padding: '10px 0' }}>Loading batches…</div>
+                    ) : batches.length === 0 ? (
+                      <div style={{ fontSize: '12px', color: '#7e8ea2', padding: '10px 0' }}>No active batches found.</div>
+                    ) : (
+                      batches
+                        .filter((b) => !batchSearch || b.name.toLowerCase().includes(batchSearch.toLowerCase()) || b.code?.toLowerCase().includes(batchSearch.toLowerCase()))
+                        .map((batch) => {
+                          const isChecked = selectedBatches.includes(batch.id);
+                          return (
+                            <label
+                              key={batch.id}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px',
+                                padding: '8px 10px',
+                                borderRadius: '6px',
+                                background: isChecked ? '#f0f5ff' : '#ffffff',
+                                border: `1px solid ${isChecked ? '#b8d0fc' : '#edf1f7'}`,
+                                cursor: 'pointer',
+                                transition: 'background 0.15s',
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => handleToggleBatch(batch.id)}
+                                style={{ width: '16px', height: '16px', accentColor: '#4779e8' }}
+                              />
+                              <span style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <strong style={{ fontSize: '13px', color: '#1c2b43' }}>{batch.name}</strong>
+                                <small style={{ fontSize: '11px', color: '#7a899e' }}>
+                                  {batch.code} {batch.subject ? `• ${batch.subject}` : ''}
+                                </small>
+                              </span>
+                            </label>
+                          );
+                        })
+                    )}
+                  </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* Step 2: Recipients Selection */}
+          {/* Step 2: Recipients Selection Dropdown (Multi-Select) */}
           <div className="card-heading" style={{ marginTop: '10px' }}>
             <div>
               <h3>2. Recipients (Who receives the SMS)</h3>
@@ -1684,81 +1771,188 @@ function BulkSmsPage() {
             </div>
           </div>
 
-          <div className="sms-recipients-grid">
-            <label className={`sms-choice-card ${recipients.student ? 'active' : ''}`}>
-              <input
-                type="checkbox"
-                checked={recipients.student}
-                onChange={(e) => setRecipients({ ...recipients, student: e.target.checked })}
-              />
-              <div className="sms-choice-content">
-                <strong>🎓 Student</strong>
-                <small>Student’s personal mobile number.</small>
-              </div>
+          <div className="field" style={{ position: 'relative', marginBottom: '16px', zIndex: recipientDropdownOpen ? 40 : 2 }}>
+            <label style={{ fontSize: '12px', fontWeight: 600, color: '#4a5970', marginBottom: '6px', display: 'block' }}>
+              Recipient Targets ({activeRecipientTypes.length} selected)
             </label>
 
-            <label className={`sms-choice-card ${recipients.father ? 'active' : ''}`}>
-              <input
-                type="checkbox"
-                checked={recipients.father}
-                onChange={(e) => setRecipients({ ...recipients, father: e.target.checked })}
-              />
-              <div className="sms-choice-content">
-                <strong>👨 Father</strong>
-                <small>Father’s contact mobile number.</small>
-              </div>
-            </label>
+            <button
+              type="button"
+              onClick={() => {
+                setBatchDropdownOpen(false);
+                setRecipientDropdownOpen((prev) => !prev);
+              }}
+              style={{
+                width: '100%',
+                minHeight: '42px',
+                padding: '8px 14px',
+                borderRadius: '8px',
+                border: `1.5px solid ${recipientDropdownOpen ? '#4779e8' : '#dbe2ea'}`,
+                background: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '10px',
+                fontSize: '13.5px',
+                color: activeRecipientTypes.length === 0 ? '#8b98a9' : '#1e293b',
+                cursor: 'pointer',
+                textAlign: 'left',
+                boxShadow: recipientDropdownOpen ? '0 0 0 3px rgba(71, 121, 232, 0.15)' : 'none',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                {activeRecipientTypes.length === 0 ? (
+                  <span>Select Recipients (None selected)...</span>
+                ) : (
+                  <span style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {recipients.student && (
+                      <span className="pill pill-blue" style={{ fontSize: '11.5px', padding: '3px 9px' }}>
+                        🎓 Student
+                      </span>
+                    )}
+                    {recipients.father && (
+                      <span className="pill pill-blue" style={{ fontSize: '11.5px', padding: '3px 9px' }}>
+                        👨 Father
+                      </span>
+                    )}
+                    {recipients.mother && (
+                      <span className="pill pill-blue" style={{ fontSize: '11.5px', padding: '3px 9px' }}>
+                        👩 Mother
+                      </span>
+                    )}
+                  </span>
+                )}
+              </span>
+              <ChevronDown size={16} style={{ transform: recipientDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0 }} />
+            </button>
 
-            <label className={`sms-choice-card ${recipients.mother ? 'active' : ''}`}>
-              <input
-                type="checkbox"
-                checked={recipients.mother}
-                onChange={(e) => setRecipients({ ...recipients, mother: e.target.checked })}
-              />
-              <div className="sms-choice-content">
-                <strong>👩 Mother</strong>
-                <small>Mother’s contact mobile number.</small>
-              </div>
-            </label>
-          </div>
+            {recipientDropdownOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 4px)',
+                  left: 0,
+                  right: 0,
+                  zIndex: 50,
+                  background: '#ffffff',
+                  border: '1.5px solid #dbe2ea',
+                  borderRadius: '9px',
+                  boxShadow: '0 10px 30px rgba(20, 36, 61, 0.15)',
+                  padding: '12px',
+                }}
+              >
+                <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="button button-quiet button-small"
+                    onClick={() => setRecipients({ student: true, father: true, mother: true })}
+                  >
+                    Select Everyone
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-quiet button-small"
+                    onClick={() => setRecipients({ student: true, father: false, mother: false })}
+                  >
+                    Student Only
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-quiet button-small"
+                    onClick={() => setRecipients({ student: false, father: true, mother: true })}
+                  >
+                    Parents Only
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-quiet button-small"
+                    style={{ marginLeft: 'auto' }}
+                    onClick={() => setRecipientDropdownOpen(false)}
+                  >
+                    Done
+                  </button>
+                </div>
 
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginTop: '10px',
-              padding: '6px 2px',
-              flexWrap: 'wrap',
-              gap: '8px',
-            }}
-          >
-            <small style={{ fontSize: '11.5px', color: '#7e8fa4' }}>
-              * Missing or empty phone numbers will be automatically skipped.
-            </small>
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <button
-                type="button"
-                className="button button-quiet button-small"
-                onClick={() => setRecipients({ student: true, father: true, mother: true })}
-              >
-                Select Everyone
-              </button>
-              <button
-                type="button"
-                className="button button-quiet button-small"
-                onClick={() => setRecipients({ student: true, father: false, mother: false })}
-              >
-                Student Only
-              </button>
-              <button
-                type="button"
-                className="button button-quiet button-small"
-                onClick={() => setRecipients({ student: false, father: true, mother: true })}
-              >
-                Parents Only
-              </button>
-            </div>
+                <div style={{ display: 'grid', gap: '8px' }}>
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      background: recipients.student ? '#f0f5ff' : '#ffffff',
+                      border: `1px solid ${recipients.student ? '#b8d0fc' : '#edf1f7'}`,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={recipients.student}
+                      onChange={(e) => setRecipients({ ...recipients, student: e.target.checked })}
+                      style={{ width: '16px', height: '16px', accentColor: '#4779e8' }}
+                    />
+                    <div>
+                      <strong style={{ fontSize: '13.5px', color: '#1c2b43', display: 'block' }}>🎓 Student</strong>
+                      <small style={{ fontSize: '11.5px', color: '#7a899e' }}>Send to student's personal phone number</small>
+                    </div>
+                  </label>
+
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      background: recipients.father ? '#f0f5ff' : '#ffffff',
+                      border: `1px solid ${recipients.father ? '#b8d0fc' : '#edf1f7'}`,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={recipients.father}
+                      onChange={(e) => setRecipients({ ...recipients, father: e.target.checked })}
+                      style={{ width: '16px', height: '16px', accentColor: '#4779e8' }}
+                    />
+                    <div>
+                      <strong style={{ fontSize: '13.5px', color: '#1c2b43', display: 'block' }}>👨 Father</strong>
+                      <small style={{ fontSize: '11.5px', color: '#7a899e' }}>Send to father's mobile number</small>
+                    </div>
+                  </label>
+
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      background: recipients.mother ? '#f0f5ff' : '#ffffff',
+                      border: `1px solid ${recipients.mother ? '#b8d0fc' : '#edf1f7'}`,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={recipients.mother}
+                      onChange={(e) => setRecipients({ ...recipients, mother: e.target.checked })}
+                      style={{ width: '16px', height: '16px', accentColor: '#4779e8' }}
+                    />
+                    <div>
+                      <strong style={{ fontSize: '13.5px', color: '#1c2b43', display: 'block' }}>👩 Mother</strong>
+                      <small style={{ fontSize: '11.5px', color: '#7a899e' }}>Send to mother's mobile number</small>
+                    </div>
+                  </label>
+                </div>
+
+                <div style={{ marginTop: '8px', fontSize: '11px', color: '#8b98a9', textAlign: 'right' }}>
+                  * Numbers without contact info will be safely skipped.
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Step 3: Message Textarea & Dynamic Tags */}
