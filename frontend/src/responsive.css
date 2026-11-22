@@ -1,0 +1,264 @@
+@media (min-width: 1201px) {
+  .stat-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1200px) {
+  .stat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.settings-logo-preview {
+  width: 62px;
+  height: 62px;
+  margin-top: 5px;
+  object-fit: contain;
+  border: 1px solid #e6eaf1;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.filter-input {
+  height: 33px;
+  min-width: 80px;
+  width: 100px;
+  padding: 0 8px;
+  border: 1px solid #e7ebf1;
+  border-radius: 6px;
+  outline: none;
+  font-size: 10px;
+}
+
+.filter-input:focus {
+  border-color: #96b0ef;
+}
+
+.history-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 0 13px;
+}
+
+.history-filter-row select,
+.history-filter-row input {
+  min-width: 130px;
+  height: 31px;
+  padding: 0 8px;
+  border: 1px solid #e5e9f0;
+  border-radius: 5px;
+  color: #64738a;
+  background: #fff;
+  font-size: 9px;
+}
+
+.income-analytics {
+  margin-top: 18px;
+  padding: 20px;
+}
+
+.income-heading,
+.income-filters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.income-heading h3 {
+  margin: 5px 0 4px;
+  color: #26344a;
+  font-size: 16px;
+}
+
+.income-heading p,
+.fee-summary-card span {
+  margin: 0;
+  color: #8994a5;
+  font-size: 11px;
+}
+
+.income-filters select,
+.fee-toolbar .toolbar-controls select,
+.fee-toolbar .toolbar-controls input {
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px solid #e5e9f0;
+  border-radius: 6px;
+  color: #64738a;
+  background: #fff;
+  font-size: 11px;
+}
+
+.income-metrics,
+.fee-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.income-metrics {
+  margin: 18px 0 5px;
+}
+
+.income-metrics > div {
+  display: grid;
+  gap: 5px;
+  padding: 12px 14px;
+  border: 1px solid #edf0f5;
+  border-radius: 8px;
+}
+
+.income-metrics small,
+.fee-summary-card small {
+  color: #8591a3;
+  font-size: 11px;
+}
+
+.income-metrics strong {
+  color: #29364a;
+  font-size: 18px;
+}
+
+.income-chart {
+  width: 100%;
+  height: 235px;
+  margin-top: 12px;
+}
+
+.fee-summary-grid {
+  margin-bottom: 16px;
+}
+
+.fee-summary-card {
+  display: grid;
+  gap: 7px;
+  padding: 15px 17px;
+}
+
+.fee-summary-card strong {
+  color: #2c3a4f;
+  font-size: 20px;
+}
+
+.fee-summary-card .collected {
+  color: #198866;
+}
+
+.fee-summary-card .outstanding {
+  color: #c27c23;
+}
+
+.fee-toolbar .toolbar-controls {
+  flex-wrap: wrap;
+}
+
+.payment-history {
+  margin-top: 5px;
+  color: #68778d;
+  font-size: 10px;
+}
+
+.payment-history summary {
+  cursor: pointer;
+}
+
+.payment-history span {
+  display: block;
+  margin-top: 4px;
+}
+
+.payment-student {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 7px;
+  background: #f6f8fb;
+}
+
+.payment-student strong {
+  color: #2e3b50;
+}
+
+.payment-student span,
+.payment-student small {
+  color: #758298;
+  font-size: 11px;
+}
+
+.status-pill.unpaid {
+  color: #a94c48;
+  background: #fff0ef;
+}
+
+.status-pill.partial {
+  color: #a96c1e;
+  background: #fff5e6;
+}
+
+.status-pill.paid {
+  color: #198866;
+  background: #eaf8f2;
+}
+
+@media (max-width: 720px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .data-card .table-toolbar > .toolbar-controls {
+    flex-wrap: wrap;
+  }
+
+  .filter-input {
+    width: 100%;
+    flex: 1;
+  }
+
+  .report-actions {
+    display: grid;
+    justify-items: start;
+  }
+
+  .history-filter-row > * {
+    flex: 1;
+    min-width: 120px;
+  }
+
+  .income-heading,
+  .income-filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .income-metrics,
+  .fee-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .income-chart {
+    height: 210px;
+  }
+}
