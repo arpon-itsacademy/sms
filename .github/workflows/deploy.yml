@@ -44,7 +44,6 @@ jobs:
       - name: 6. Prepare production folders & FTP includes
         run: |
           mkdir -p storage/framework/{sessions,views,cache} storage/logs bootstrap/cache
-          echo "!vendor/" >> .git-ftp-include
           echo "!public/assets/" >> .git-ftp-include
           echo "!public/index.html" >> .git-ftp-include
 
