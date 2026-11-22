@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\BatchController;
 use App\Http\Controllers\Api\BulkSmsController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ExamController;
+use App\Http\Controllers\Api\ExamResultSmsController;
 use App\Http\Controllers\Api\FeeController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SettingsController;
@@ -65,8 +66,12 @@ Route::middleware(['auth:sanctum', EnsureAdministrator::class])->group(function 
     Route::put('/settings/sms', [SmsSettingsController::class, 'update']);
     Route::get('/settings/sms/balance', [SmsSettingsController::class, 'balance']);
     Route::post('/settings/sms/test', [SmsSettingsController::class, 'test']);
+    Route::get('/settings/sms-templates', [ExamResultSmsController::class, 'getTemplates']);
+    Route::put('/settings/sms-templates', [ExamResultSmsController::class, 'updateTemplates']);
     Route::post('/sms/preview', [BulkSmsController::class, 'preview']);
     Route::post('/sms/send-bulk', [BulkSmsController::class, 'send']);
+    Route::post('/exams/{exam}/send-results/preview', [ExamResultSmsController::class, 'preview']);
+    Route::post('/exams/{exam}/send-results', [ExamResultSmsController::class, 'send']);
 
     Route::get('/users', [UserController::class, 'index']);
     Route::post('/users', [UserController::class, 'store']);

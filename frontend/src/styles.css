@@ -367,3 +367,17 @@ html[data-font-size="extra_large"] .button { font-size: 15.5px !important; heigh
   border-color: #4779e8 !important;
   box-shadow: 0 0 0 3px rgba(71, 121, 232, 0.12) !important;
 }
+
+.sms-automation-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .sms-automation-layout {
+    grid-template-columns: 1fr;
+  }
+}
+

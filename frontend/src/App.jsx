@@ -64,6 +64,7 @@ function App() {
     if (path.includes('/marks')) return 'Marks entry';
     if (path === '/results') return 'Results';
     if (path === '/reports') return 'Reports';
+    if (path === '/sms/automation') return 'SMS Automation';
     if (path === '/sms/bulk') return 'Bulk SMS';
     if (path.startsWith('/sms')) return 'SMS Operation';
     if (path === '/users') return 'All User';
@@ -135,6 +136,7 @@ function App() {
       icon: Send,
       sublinks: [
         { to: '/sms/bulk', label: 'Bulk SMS', icon: Send },
+        { to: '/sms/automation', label: 'SMS Automation', icon: Sparkles },
       ],
     },
     {
@@ -266,6 +268,7 @@ function App() {
             <Route path="/reports" element={<Reports />} />
             <Route path="/sms" element={<Navigate to="/sms/bulk" replace />} />
             <Route path="/sms/bulk" element={<BulkSmsPage />} />
+            <Route path="/sms/automation" element={<SmsAutomationPage />} />
             <Route path="/users" element={<AllUsers currentUser={user} />} />
             <Route path="/users/create" element={<CreateUser />} />
             <Route path="/appearance" element={<Navigate to="/appearance/general" replace />} />
@@ -934,6 +937,7 @@ function AttendancePage() {
 
 function Exams() {
   const [modal, setModal] = useState(false);
+  const [sendResultExam, setSendResultExam] = useState(null);
   const [term, setTerm] = useState('');
   const { toast, notify } = useToast();
   const queryClient = useQueryClient();
@@ -943,9 +947,10 @@ function Exams() {
     {toast && <Toast toast={toast} />}
     <div className="section-shortcuts"><Link to="/results"><ChartNoAxesCombined size={16} /> Browse all results <ChevronRight size={15} /></Link></div>
     <section className="card data-card"><div className="table-toolbar"><div className="toolbar-search"><Search size={16} /><input value={term} onChange={(event) => setTerm(event.target.value)} placeholder="Search exam title or subject…" /></div><span className="result-count">{data?.meta?.total || 0} exams</span></div>
-      {isLoading ? <TableSkeleton /> : isError ? <ErrorPage /> : data?.data?.length ? <div className="table-scroll"><table><thead><tr><th>EXAM</th><th>SUBJECT</th><th>DATE</th><th>TOTAL MARKS</th><th>BATCHES</th><th>STATUS</th><th>ACTIONS</th></tr></thead><tbody>{data.data.map((exam) => <tr key={exam.id}><td><strong>{exam.title}</strong><small className="table-sub">{exam.type.replace('_', ' ')}</small></td><td>{exam.subject}</td><td>{fmtDate(exam.exam_date)}</td><td>{exam.total_marks}</td><td><div className="batch-pills">{exam.batches?.map((batch) => <span className="pill" key={batch.id}>{batch.name}</span>)}</div></td><td><span className={`status-pill ${exam.status}`}>{exam.status}</span></td><td><div className="actions-cell"><Link className="row-action" to={`/exams/${exam.id}/marks`}>Enter marks</Link><Link className="row-action" to={`/results?exam=${exam.id}`}>Results</Link></div></td></tr>)}</tbody></table></div> : <EmptyState title="No exams created" text="Create an exam and assign the batches taking part." action={<button className="button button-primary button-small" onClick={() => setModal(true)}><Plus size={15} /> Create exam</button>} />}
+      {isLoading ? <TableSkeleton /> : isError ? <ErrorPage /> : data?.data?.length ? <div className="table-scroll"><table><thead><tr><th>EXAM</th><th>SUBJECT</th><th>DATE</th><th>TOTAL MARKS</th><th>BATCHES</th><th>STATUS</th><th>ACTIONS</th></tr></thead><tbody>{data.data.map((exam) => <tr key={exam.id}><td><strong>{exam.title}</strong><small className="table-sub">{exam.type.replace('_', ' ')}</small></td><td>{exam.subject}</td><td>{fmtDate(exam.exam_date)}</td><td>{exam.total_marks}</td><td><div className="batch-pills">{exam.batches?.map((batch) => <span className="pill" key={batch.id}>{batch.name}</span>)}</div></td><td><span className={`status-pill ${exam.status}`}>{exam.status}</span></td><td><div className="actions-cell"><Link className="row-action" to={`/exams/${exam.id}/marks`}>Enter marks</Link><Link className="row-action" to={`/results?exam=${exam.id}`}>Results</Link><button type="button" className="row-action" style={{ color: '#2563eb', fontWeight: 650, display: 'inline-flex', alignItems: 'center', gap: 3 }} onClick={() => setSendResultExam(exam)}><Send size={12} /> Send result</button></div></td></tr>)}</tbody></table></div> : <EmptyState title="No exams created" text="Create an exam and assign the batches taking part." action={<button className="button button-primary button-small" onClick={() => setModal(true)}><Plus size={15} /> Create exam</button>} />}
     </section>
     {modal && <ExamForm onClose={() => setModal(false)} onSaved={() => { setModal(false); queryClient.invalidateQueries({ queryKey: ['exams'] }); notify('Exam created.'); }} />}
+    {sendResultExam && <SendResultModal exam={sendResultExam} onClose={() => setSendResultExam(null)} />}
   </>;
 }
 
@@ -972,6 +977,7 @@ function MarksEntry() {
   const [term, setTerm] = useState('');
   const [rows, setRows] = useState([]);
   const [error, setError] = useState('');
+  const [sendResultModalOpen, setSendResultModalOpen] = useState(false);
   const { toast, notify } = useToast();
   const queryClient = useQueryClient();
   const { data: exam } = useQuery({ queryKey: ['exam', id], queryFn: async () => (await api.get(`/exams/${id}`)).data.data });
@@ -989,12 +995,13 @@ function MarksEntry() {
   };
   const visibleRows = rows.filter((row) => `${row.name} ${row.roll_number}`.toLowerCase().includes(term.toLowerCase()));
   if (!exam) return <LoadingPage />;
-  return <><Link className="back-link" to="/exams"><ArrowLeft size={15} /> All exams</Link><PageHeading eyebrow={`${exam.subject} · ${fmtDate(exam.exam_date)}`} title={exam.title} subtitle={`Maximum score: ${exam.total_marks} marks · ${exam.status}`} />
+  return <><Link className="back-link" to="/exams"><ArrowLeft size={15} /> All exams</Link><PageHeading eyebrow={`${exam.subject} · ${fmtDate(exam.exam_date)}`} title={exam.title} subtitle={`Maximum score: ${exam.total_marks} marks · ${exam.status}`} action={<div style={{ display: 'flex', gap: 8 }}><button type="button" className="button button-primary" onClick={() => setSendResultModalOpen(true)}><Send size={15} /> Send Result SMS</button></div>} />
     {toast && <Toast toast={toast} />}
     <section className="card attendance-filter"><div><div className="form-section-title">Choose a batch</div><p>Marks remain a single result per student for this exam, even if they attend multiple selected batches.</p></div><div className="attendance-controls"><Field label="Exam batch"><select value={batchId} onChange={(event) => { setBatchId(event.target.value); setRows([]); }}><option value="">Select batch…</option>{exam.batches?.map((batch) => <option key={batch.id} value={batch.id}>{batch.name}</option>)}</select></Field><button className="button button-primary" onClick={() => load()}>Load students</button></div></section>
     {error && <div className="form-alert">{error}</div>}
     {!!rows.length && <section className="card data-card attendance-card"><div className="table-toolbar"><div className="toolbar-search"><Search size={16} /><input value={term} onChange={(event) => setTerm(event.target.value)} placeholder="Find a student…" /></div><span className="result-count">Total marks: {exam.total_marks}</span></div><div className="table-scroll"><table><thead><tr><th>STUDENT</th><th>ROLL</th><th>MAXIMUM</th><th>OBTAINED MARKS</th><th>RESULT STATUS</th></tr></thead><tbody>{visibleRows.map((row) => <tr key={row.id}><td><span className="student-cell"><span className="avatar">{initials(row.name)}</span><strong>{row.name}</strong></span></td><td className="mono">{row.roll_number}</td><td>{exam.total_marks}</td><td><input className="marks-input" type="number" min="0" max={exam.total_marks} step="0.01" disabled={row.is_absent} value={row.is_absent ? '' : row.obtained_marks} placeholder="—" onChange={(event) => setRows(rows.map((item) => item.id === row.id ? { ...item, obtained_marks: event.target.value } : item))} /></td><td><label className="absent-toggle"><input type="checkbox" checked={row.is_absent} onChange={(event) => setRows(rows.map((item) => item.id === row.id ? { ...item, is_absent: event.target.checked, obtained_marks: '' } : item))} /> Mark absent</label></td></tr>)}</tbody></table></div><div className="table-footer"><span>Marks can be left blank; absent students are recorded separately from zero marks.</span><button className="button button-primary" onClick={save}><Check size={16} /> Save marks</button></div></section>}
     {!rows.length && batchId && <div className="card empty-card"><EmptyState title="Load the selected batch" text="Students enrolled on the exam date will appear here." /></div>}
+    {sendResultModalOpen && exam && <SendResultModal exam={exam} onClose={() => setSendResultModalOpen(false)} />}
   </>;
 }
 
@@ -1002,15 +1009,18 @@ function Results() {
   const [params] = useSearchParams();
   const [examId, setExamId] = useState(params.get('exam') || '');
   const [batchId, setBatchId] = useState('');
+  const [sendResultExam, setSendResultExam] = useState(null);
   const { data: exams } = useQuery({ queryKey: ['exams'], queryFn: async () => (await api.get('/exams', { params: { per_page: 100 } })).data.data });
   const { data: batches } = useQuery({ queryKey: ['batches', 'all'], queryFn: async () => (await api.get('/batches', { params: { per_page: 100 } })).data.data });
   const { data, isLoading, isError } = useQuery({ queryKey: ['results', examId, batchId], queryFn: async () => (await api.get('/results', { params: { exam_id: examId || undefined, batch_id: batchId || undefined } })).data });
+  const activeExam = examId && exams?.find((e) => String(e.id) === String(examId));
   return <>
-    <PageHeading eyebrow="ACADEMIC RECORDS" title="Results" subtitle="Review marks and performance across all exams." action={<Link to="/exams" className="button button-outline"><ArrowLeft size={15} /> Exams</Link>} />
+    <PageHeading eyebrow="ACADEMIC RECORDS" title="Results" subtitle="Review marks and performance across all exams." action={<div style={{ display: 'flex', gap: 8 }}>{activeExam && <button type="button" className="button button-primary" onClick={() => setSendResultExam(activeExam)}><Send size={15} /> Send Result SMS</button>}<Link to="/exams" className="button button-outline"><ArrowLeft size={15} /> Exams</Link></div>} />
     <section className="card data-card"><div className="table-toolbar"><div className="toolbar-controls"><select value={examId} onChange={(event) => setExamId(event.target.value)}><option value="">All exams</option>{exams?.map((exam) => <option key={exam.id} value={exam.id}>{exam.title}</option>)}</select><select value={batchId} onChange={(event) => setBatchId(event.target.value)}><option value="">All batches</option>{batches?.map((batch) => <option key={batch.id} value={batch.id}>{batch.name}</option>)}</select></div><span className="result-count">{data?.meta?.total || 0} results</span></div>
       {isLoading ? <TableSkeleton /> : isError ? <ErrorPage /> : data?.data?.length ? <div className="table-scroll"><table><thead><tr><th>STUDENT</th><th>EXAM</th><th>BATCH</th><th>EXAM DATE</th><th>MARKS</th><th>PERCENTAGE</th><th>STATUS</th></tr></thead><tbody>{data.data.map((row) => <tr key={`${row.exam_id}-${row.student_id}`}><td><Link className="text-link" to={`/students/${row.student_id}`}>{row.student} <span className="table-sub">{row.roll_number}</span></Link></td><td>{row.exam}</td><td>{row.batch}</td><td>{fmtDate(row.exam_date)}</td><td>{row.is_absent ? 'Absent' : row.obtained_marks === null ? 'Not entered' : `${row.obtained_marks} / ${row.total_marks}`}</td><td>{row.percentage === null ? '—' : `${row.percentage}%`}</td><td><span className={`status-pill ${row.is_absent ? 'inactive' : row.obtained_marks === null ? 'draft' : 'active'}`}>{row.is_absent ? 'Absent' : row.obtained_marks === null ? 'Pending' : 'Scored'}</span></td></tr>)}</tbody></table></div> : <EmptyState title="No results to show" text="Enter student marks for an exam to see results here." action={<Link to="/exams" className="button button-primary button-small">Go to exams</Link>} />}
       {!!data?.data?.length && <div className="table-footer"><div className="toolbar-controls"><button className="button button-outline button-small" onClick={() => window.print()}><ArrowDownToLine size={15} /> Print results</button><button className="button button-outline button-small" onClick={() => window.open(`${API_ORIGIN}/api/reports/exams?export=1${examId ? `&exam_id=${examId}` : ''}${batchId ? `&batch_id=${batchId}` : ''}`, '_blank')}>Export CSV</button></div><span>Percentage = obtained marks ÷ total marks × 100.</span></div>}
     </section>
+    {sendResultExam && <SendResultModal exam={sendResultExam} onClose={() => setSendResultExam(null)} />}
   </>;
 }
 
@@ -2463,6 +2473,639 @@ function BulkSmsPage() {
           </div>
         </Modal>
       )}
+    </>
+  );
+}
+
+function SendResultModal({ exam, onClose }) {
+  const { toast, notify } = useToast();
+  const [recipients, setRecipients] = useState({
+    student: true,
+    father: false,
+    mother: false,
+  });
+  const [batchId, setBatchId] = useState('');
+  const [previewData, setPreviewData] = useState(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [previewError, setPreviewError] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [sendSuccess, setSendSuccess] = useState(null);
+
+  const activeRecipients = Object.entries(recipients)
+    .filter(([_, v]) => v)
+    .map(([k]) => k);
+
+  const fetchPreview = async (selectedRecipients = activeRecipients, selectedBatch = batchId) => {
+    if (selectedRecipients.length === 0) {
+      setPreviewData(null);
+      setPreviewError('Please select at least one recipient type (Student, Father, or Mother).');
+      return;
+    }
+    setLoadingPreview(true);
+    setPreviewError('');
+    try {
+      const res = await api.post(`/exams/${exam.id}/send-results/preview`, {
+        batch_id: selectedBatch ? Number(selectedBatch) : null,
+        recipients: selectedRecipients,
+      });
+      setPreviewData(res.data);
+    } catch (err) {
+      setPreviewError(messageFromError(err));
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPreview();
+  }, [exam.id, batchId, recipients.student, recipients.father, recipients.mother]);
+
+  const handleToggleRecipient = (type) => {
+    setRecipients((prev) => ({ ...prev, [type]: !prev[type] }));
+  };
+
+  const handlePreset = (type) => {
+    if (type === 'student') {
+      setRecipients({ student: true, father: false, mother: false });
+    } else if (type === 'parents') {
+      setRecipients({ student: false, father: true, mother: true });
+    } else if (type === 'all') {
+      setRecipients({ student: true, father: true, mother: true });
+    }
+  };
+
+  const handleSend = async () => {
+    if (activeRecipients.length === 0) {
+      setPreviewError('Please select at least one recipient type.');
+      return;
+    }
+    setIsSending(true);
+    setPreviewError('');
+    try {
+      const res = await api.post(`/exams/${exam.id}/send-results`, {
+        batch_id: batchId ? Number(batchId) : null,
+        recipients: activeRecipients,
+      });
+      setSendSuccess(res.data);
+      notify(res.data.message || 'Exam results SMS sent successfully!');
+    } catch (err) {
+      setPreviewError(messageFromError(err));
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  return (
+    <Modal title={`Send Exam Result SMS — ${exam.title}`} onClose={onClose} wide>
+      {toast && <Toast toast={toast} />}
+
+      {sendSuccess ? (
+        <div style={{ padding: '12px 0', display: 'grid', gap: '16px' }}>
+          <div className="card" style={{ background: '#f0fdf4', borderColor: '#bbf7d0', padding: '18px 20px', borderRadius: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#166534', marginBottom: '8px' }}>
+              <Check size={20} />
+              <strong style={{ fontSize: '15.5px' }}>SMS Broadcast Dispatched!</strong>
+            </div>
+            <p style={{ margin: 0, color: '#15803d', fontSize: '13.5px', lineHeight: 1.5 }}>
+              {sendSuccess.message}
+            </p>
+          </div>
+
+          <div className="sms-preview-summary-grid">
+            <div className="sms-preview-stat">
+              <small>Total Students</small>
+              <strong>{sendSuccess.total_students}</strong>
+            </div>
+            <div className="sms-preview-stat">
+              <small>SMS Delivered</small>
+              <strong style={{ color: '#16a34a' }}>{sendSuccess.sent_count}</strong>
+            </div>
+            <div className="sms-preview-stat">
+              <small>Failed</small>
+              <strong style={{ color: sendSuccess.failed_count > 0 ? '#dc2626' : '#64748b' }}>{sendSuccess.failed_count}</strong>
+            </div>
+            <div className="sms-preview-stat">
+              <small>Exam</small>
+              <strong style={{ fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{exam.title}</strong>
+            </div>
+          </div>
+
+          {sendSuccess.errors && sendSuccess.errors.length > 0 && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px', fontSize: '12.5px', color: '#991b1b' }}>
+              <strong>Failed details:</strong>
+              <ul style={{ margin: '6px 0 0', paddingLeft: '20px' }}>
+                {sendSuccess.errors.map((err, idx) => (
+                  <li key={idx}>{err}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="modal-actions" style={{ justifyContent: 'flex-end', marginTop: '12px' }}>
+            <button type="button" className="button button-primary" onClick={onClose}>
+              Close
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: '18px' }}>
+          {previewError && (
+            <div className="card" style={{ background: '#fef2f2', borderColor: '#fecaca', color: '#991b1b', padding: '12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertCircle size={16} />
+              <span>{previewError}</span>
+            </div>
+          )}
+
+          {/* Exam Summary Banner */}
+          <div style={{ background: '#f8fafd', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 16px', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#64748b', fontWeight: 650 }}>Assessment</div>
+              <strong style={{ fontSize: '15px', color: '#0f172a' }}>{exam.title}</strong>
+              <span style={{ marginLeft: '8px', fontSize: '12px', color: '#64748b' }}>({exam.subject} · Total: {exam.total_marks})</span>
+            </div>
+            {exam.batches && exam.batches.length > 1 && (
+              <div style={{ minWidth: '180px' }}>
+                <select
+                  value={batchId}
+                  onChange={(e) => setBatchId(e.target.value)}
+                  style={{ width: '100%', padding: '6px 10px', fontSize: '12.5px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                >
+                  <option value="">All Batches ({exam.batches.length})</option>
+                  {exam.batches.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Recipient Selection */}
+          <div className="card" style={{ padding: '16px', display: 'grid', gap: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+              <div>
+                <strong style={{ fontSize: '13.5px', color: '#1e293b' }}>Select Recipients</strong>
+                <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#64748b' }}>
+                  Choose who receives the exam result SMS:
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  type="button"
+                  className="button button-outline button-small"
+                  onClick={() => handlePreset('student')}
+                  style={{ fontSize: '11px', padding: '4px 8px' }}
+                >
+                  Student Only
+                </button>
+                <button
+                  type="button"
+                  className="button button-outline button-small"
+                  onClick={() => handlePreset('parents')}
+                  style={{ fontSize: '11px', padding: '4px 8px' }}
+                >
+                  Parents Only
+                </button>
+                <button
+                  type="button"
+                  className="button button-outline button-small"
+                  onClick={() => handlePreset('all')}
+                  style={{ fontSize: '11px', padding: '4px 8px' }}
+                >
+                  Everyone
+                </button>
+              </div>
+            </div>
+
+            <div className="sms-recipients-grid">
+              <label className={`sms-choice-card ${recipients.student ? 'active' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={recipients.student}
+                  onChange={() => handleToggleRecipient('student')}
+                />
+                <div className="sms-choice-content">
+                  <strong>Student</strong>
+                  <small>Send to student's mobile number</small>
+                </div>
+              </label>
+
+              <label className={`sms-choice-card ${recipients.father ? 'active' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={recipients.father}
+                  onChange={() => handleToggleRecipient('father')}
+                />
+                <div className="sms-choice-content">
+                  <strong>Father</strong>
+                  <small>Send to father's contact number</small>
+                </div>
+              </label>
+
+              <label className={`sms-choice-card ${recipients.mother ? 'active' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={recipients.mother}
+                  onChange={() => handleToggleRecipient('mother')}
+                />
+                <div className="sms-choice-content">
+                  <strong>Mother</strong>
+                  <small>Send to mother's contact number</small>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* Stats Bar */}
+          {loadingPreview ? (
+            <div style={{ padding: '24px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
+              Calculating merit ranks and preparing SMS preview…
+            </div>
+          ) : previewData ? (
+            <>
+              <div className="sms-preview-summary-grid">
+                <div className="sms-preview-stat">
+                  <small>Total Students</small>
+                  <strong>{previewData.total_students}</strong>
+                </div>
+                <div className="sms-preview-stat">
+                  <small>Total SMS Recipients</small>
+                  <strong style={{ color: '#2563eb' }}>{previewData.total_recipients}</strong>
+                </div>
+                <div className="sms-preview-stat">
+                  <small>Highest Score</small>
+                  <strong style={{ color: '#16a34a' }}>{previewData.exam?.highest_marks ?? '—'}</strong>
+                </div>
+                <div className="sms-preview-stat">
+                  <small>Encoding</small>
+                  <strong style={{ fontSize: '14px' }}>
+                    {previewData.is_unicode ? 'Unicode / Bangla' : 'Standard GSM'}
+                  </strong>
+                </div>
+              </div>
+
+              {/* Sample Previews */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <strong style={{ fontSize: '13px', color: '#334155' }}>
+                    Message Preview ({previewData.samples?.length || 0} Sample Students)
+                  </strong>
+                  <span style={{ fontSize: '11px', color: '#64748b' }}>
+                    Template configured in SMS Operation → SMS Automation
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gap: '10px', maxHeight: '240px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {previewData.samples && previewData.samples.length > 0 ? (
+                    previewData.samples.map((sample) => (
+                      <div key={sample.student_id} className="sms-preview-item">
+                        <div className="sms-preview-item-header">
+                          <div>
+                            <strong style={{ fontSize: '13px' }}>{sample.student_name}</strong>
+                            <span style={{ marginLeft: '8px', fontSize: '11.5px', color: '#64748b' }}>
+                              Roll: {sample.roll_number || '—'} · Marks: <strong>{sample.obtained_marks}</strong> · Position: <span className="pill" style={{ background: '#dbeafe', color: '#1e40af', fontWeight: 650 }}>{sample.merit_position}</span>
+                            </span>
+                          </div>
+                          <span style={{ fontSize: '11px', color: '#64748b' }}>
+                            {sample.phones?.length || 0} recipient number(s)
+                          </span>
+                        </div>
+                        <div className="sms-bubble">
+                          {sample.message}
+                        </div>
+                        {sample.destinations && sample.destinations.length > 0 && (
+                          <div style={{ marginTop: '6px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                            {sample.destinations.map((d, i) => (
+                              <span key={i} style={{ fontSize: '10.5px', background: '#f1f5f9', padding: '2px 7px', borderRadius: '4px', color: '#475569' }}>
+                                {d.type}: {d.phone}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="empty-state" style={{ minHeight: '100px' }}>
+                      <p>No student results or phone numbers found for this exam.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : null}
+
+          <div className="modal-actions" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
+            <span style={{ fontSize: '12px', color: '#64748b' }}>
+              Results will be broadcasted using BulkSMSBD API.
+            </span>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                className="button button-outline"
+                disabled={isSending}
+                onClick={onClose}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="button button-primary"
+                disabled={isSending || !previewData || previewData.total_recipients === 0}
+                onClick={handleSend}
+              >
+                <Send size={15} />
+                {isSending
+                  ? 'Sending SMS…'
+                  : `Send Result SMS (${previewData?.total_recipients || 0} Recipients)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function SmsAutomationPage() {
+  const queryClient = useQueryClient();
+  const { toast, notify } = useToast();
+  const textareaRef = useRef(null);
+
+  const [template, setTemplate] = useState('');
+  const [defaultTemplate, setDefaultTemplate] = useState('');
+  const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Fetch saved template
+  const { data, isLoading } = useQuery({
+    queryKey: ['sms-template-exam-result'],
+    queryFn: async () => {
+      const res = await api.get('/settings/sms-templates');
+      return res.data;
+    },
+  });
+
+  useEffect(() => {
+    if (data) {
+      setTemplate(data.exam_result || '');
+      setDefaultTemplate(data.default_template || '');
+    }
+  }, [data]);
+
+  const insertTag = (tag) => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      setTemplate((prev) => prev + tag);
+      return;
+    }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const before = template.substring(0, start);
+    const after = template.substring(end);
+    const next = before + tag + after;
+    setTemplate(next);
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + tag.length, start + tag.length);
+    }, 0);
+  };
+
+  const handleSave = async () => {
+    setError('');
+    if (!template.trim()) {
+      setError('Please provide a message template.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await api.put('/settings/sms-templates', {
+        exam_result: template.trim(),
+      });
+      queryClient.invalidateQueries({ queryKey: ['sms-template-exam-result'] });
+      notify('Exam Result SMS template saved successfully.');
+    } catch (err) {
+      setError(messageFromError(err));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleReset = () => {
+    if (defaultTemplate) {
+      setTemplate(defaultTemplate);
+      notify('Template reset to default.');
+    }
+  };
+
+  // Mock student data for live preview
+  const mockStudent = {
+    '{student_name}': 'Abrar Fahim',
+    '{name}': 'Abrar Fahim',
+    '{father_name}': 'Md. Rafiqul Islam',
+    '{mother_name}': 'Nasrin Sultana',
+    '{school_name}': 'Dhaka Residential Model College',
+    '{school}': 'Dhaka Residential Model College',
+    '{roll_number}': '101',
+    '{roll}': '101',
+    '{exam_name}': 'HSC Model Test 2026',
+    '{exam}': 'HSC Model Test 2026',
+    '{subject}': 'English 1st Paper',
+    '{total_marks}': '100',
+    '{obtained_marks}': '88',
+    '{marks}': '88',
+    '{highest_marks}': '94',
+    '{highest_mark}': '94',
+    '{merit_position}': '2nd',
+    '{position}': '2nd',
+    '{rank}': '2nd',
+    '{batch_name}': 'Class 12 - Elite Batch',
+    '{batch}': 'Class 12 - Elite Batch',
+    '{institution_name}': 'Tabassum English Coaching',
+  };
+
+  const renderPreview = (tmpl) => {
+    if (!tmpl) return 'Type your template above to preview the SMS output.';
+    let output = tmpl;
+    for (const [tag, val] of Object.entries(mockStudent)) {
+      output = output.split(tag).join(val);
+    }
+    return output;
+  };
+
+  const isUnicode = Array.from(template).some((char) => char.charCodeAt(0) > 127);
+  const charLength = template.length;
+  const smsParts = charLength === 0 ? 0 : (isUnicode ? (charLength <= 70 ? 1 : Math.ceil(charLength / 67)) : (charLength <= 160 ? 1 : Math.ceil(charLength / 153)));
+
+  const renderedPreviewText = renderPreview(template);
+  const previewCharLength = renderedPreviewText.length;
+  const previewIsUnicode = Array.from(renderedPreviewText).some((char) => char.charCodeAt(0) > 127);
+  const previewParts = previewCharLength === 0 ? 0 : (previewIsUnicode ? (previewCharLength <= 70 ? 1 : Math.ceil(previewCharLength / 67)) : (previewCharLength <= 160 ? 1 : Math.ceil(previewCharLength / 153)));
+
+  const availableTags = [
+    { tag: '{student_name}', label: "Student's Name" },
+    { tag: '{father_name}', label: "Father's Name" },
+    { tag: '{mother_name}', label: "Mother's Name" },
+    { tag: '{school_name}', label: 'School Name' },
+    { tag: '{exam_name}', label: 'Exam Title' },
+    { tag: '{subject}', label: 'Subject' },
+    { tag: '{obtained_marks}', label: 'Obtained Marks' },
+    { tag: '{total_marks}', label: 'Total Marks' },
+    { tag: '{highest_marks}', label: 'Highest Marks' },
+    { tag: '{merit_position}', label: 'Merit Position (1st, 2nd...)' },
+    { tag: '{batch_name}', label: 'Batch Name' },
+    { tag: '{institution_name}', label: 'Institution Name' },
+  ];
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="SMS OPERATION"
+        title="SMS Automation"
+        subtitle="Configure automated SMS templates for exam results and student notices with dynamic tags."
+      />
+      {toast && <Toast toast={toast} />}
+
+      {error && (
+        <div className="card" style={{ background: '#fef2f2', borderColor: '#fecaca', color: '#991b1b', padding: '12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+          <AlertCircle size={16} />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <div className="sms-automation-layout">
+        {/* Editor Card */}
+        <section className="card" style={{ padding: '20px', display: 'grid', gap: '16px' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <Sparkles size={18} color="#2563eb" />
+              <strong style={{ fontSize: '15px' }}>Exam Result SMS Template</strong>
+            </div>
+            <p style={{ margin: 0, fontSize: '12.5px', color: '#64748b' }}>
+              This template will be used when you click <strong>Send Result</strong> on the Exams, Marks Entry, or Results pages.
+            </p>
+          </div>
+
+          <div>
+            <div style={{ fontSize: '11px', fontWeight: 650, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '6px' }}>
+              Dynamic Tags (Click to insert):
+            </div>
+            <div className="sms-tag-toolbar">
+              {availableTags.map((t) => (
+                <button
+                  key={t.tag}
+                  type="button"
+                  className="sms-tag-chip"
+                  onClick={() => insertTag(t.tag)}
+                  title={`Insert ${t.tag}`}
+                >
+                  {t.tag}
+                  <span>({t.label})</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <textarea
+              ref={textareaRef}
+              rows={6}
+              value={template}
+              onChange={(e) => setTemplate(e.target.value)}
+              placeholder="e.g. Dear {student_name}, your result for {exam_name} ({subject}): Marks: {obtained_marks}/{total_marks}, Highest: {highest_marks}, Merit Position: {merit_position} in {batch_name}. {institution_name}"
+              style={{
+                width: '100%',
+                borderRadius: '8px 8px 0 0',
+                border: '1px solid #cbd5e1',
+                padding: '12px 14px',
+                fontSize: '13.5px',
+                lineHeight: '1.6',
+                fontFamily: 'inherit',
+                outline: 'none',
+                resize: 'vertical',
+              }}
+            />
+            <div className="sms-counter-bar">
+              <span style={{ color: '#64748b' }}>
+                Template Characters: <strong>{charLength}</strong>
+              </span>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <span className="pill" style={{ background: isUnicode ? '#fef3c7' : '#e0f2fe', color: isUnicode ? '#92400e' : '#0369a1', fontWeight: 600 }}>
+                  {isUnicode ? 'Unicode / Bangla' : 'Standard GSM'}
+                </span>
+                <span style={{ color: '#334155', fontWeight: 600 }}>
+                  ~{smsParts} SMS {smsParts === 1 ? 'part' : 'parts'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+            <button
+              type="button"
+              className="button button-outline"
+              onClick={handleReset}
+              disabled={isSaving || !defaultTemplate || template === defaultTemplate}
+            >
+              <RefreshCw size={14} />
+              Reset to Default
+            </button>
+            <button
+              type="button"
+              className="button button-primary"
+              onClick={handleSave}
+              disabled={isSaving || isLoading}
+            >
+              <Check size={16} />
+              {isSaving ? 'Saving Template…' : 'Save Template'}
+            </button>
+          </div>
+        </section>
+
+        {/* Live Preview Card */}
+        <section className="card" style={{ padding: '20px', display: 'grid', gap: '16px', background: '#fcfdfd' }}>
+          <div>
+            <strong style={{ fontSize: '15px', color: '#1e293b' }}>Live Student Output Preview</strong>
+            <p style={{ margin: '2px 0 0', fontSize: '12.5px', color: '#64748b' }}>
+              How the actual SMS looks when delivered to a student / guardian:
+            </p>
+          </div>
+
+          <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px', display: 'grid', gap: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>
+              <div>
+                <strong style={{ fontSize: '13px', color: '#0f172a' }}>{mockStudent['{student_name}']}</strong>
+                <span style={{ fontSize: '11px', color: '#64748b', marginLeft: '6px' }}>Roll: {mockStudent['{roll_number}']}</span>
+              </div>
+              <span className="pill" style={{ background: '#dcfce7', color: '#15803d', fontWeight: 650 }}>
+                Merit: {mockStudent['{merit_position}']}
+              </span>
+            </div>
+
+            <div className="sms-bubble" style={{ minHeight: '90px', fontSize: '13px', lineHeight: '1.6' }}>
+              {renderedPreviewText}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', color: '#64748b' }}>
+              <span>Preview chars: <strong>{previewCharLength}</strong></span>
+              <span>Est. SMS parts: <strong>{previewParts}</strong> ({previewIsUnicode ? 'Unicode' : 'GSM'})</span>
+            </div>
+          </div>
+
+          {/* Sample values table for transparency */}
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px', fontSize: '12px' }}>
+            <strong style={{ display: 'block', marginBottom: '8px', color: '#334155' }}>Mock Values Used in Preview:</strong>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px', color: '#475569' }}>
+              <div>• <code>{`{student_name}`}</code>: Abrar Fahim</div>
+              <div>• <code>{`{exam_name}`}</code>: HSC Model Test</div>
+              <div>• <code>{`{obtained_marks}`}</code>: 88</div>
+              <div>• <code>{`{highest_marks}`}</code>: 94</div>
+              <div>• <code>{`{merit_position}`}</code>: 2nd</div>
+              <div>• <code>{`{batch_name}`}</code>: Class 12 - Elite</div>
+              <div>• <code>{`{father_name}`}</code>: Md. Rafiqul Islam</div>
+              <div>• <code>{`{school_name}`}</code>: Dhaka Residential</div>
+            </div>
+          </div>
+        </section>
+      </div>
     </>
   );
 }
