@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\FeeController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\StudentController;
+use App\Http\Controllers\Api\UserController;
 use App\Http\Middleware\EnsureAdministrator;
 use Illuminate\Support\Facades\Route;
 
@@ -58,4 +59,8 @@ Route::middleware(['auth:sanctum', EnsureAdministrator::class])->group(function 
 
     Route::get('/settings', [SettingsController::class, 'show']);
     Route::put('/settings', [SettingsController::class, 'update']);
+
+    Route::get('/users', [UserController::class, 'index']);
+    Route::post('/users', [UserController::class, 'store']);
+    Route::delete('/users/{user}', [UserController::class, 'destroy']);
 });

@@ -6,8 +6,8 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   Activity, ArrowDownToLine, ArrowLeft, BookOpen, CalendarCheck, CalendarDays, ChartNoAxesCombined,
-  Check, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, ClipboardList, CreditCard, GraduationCap, LayoutDashboard,
-  LogOut, Menu, Plus, Search, Settings, ShieldCheck, SlidersHorizontal, Sparkles, Users, X,
+  Check, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, ClipboardList, CreditCard, Eye, EyeOff, GraduationCap, LayoutDashboard,
+  LogOut, Menu, Plus, Search, Settings, ShieldCheck, SlidersHorizontal, Sparkles, Trash2, UserPlus, Users, X,
 } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { api, API_ORIGIN, messageFromError, responseData, startSession } from './api.js';
@@ -32,6 +32,32 @@ function App() {
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(location.pathname.startsWith('/users'));
+
+  useEffect(() => {
+    if (location.pathname.startsWith('/users')) {
+      setUserMenuOpen(true);
+    }
+  }, [location.pathname]);
+
+  const getBreadcrumbTitle = (path) => {
+    if (path === '/') return 'Dashboard';
+    if (path === '/students') return 'Students';
+    if (path.startsWith('/students/')) return 'Student profile';
+    if (path === '/batches') return 'Batches';
+    if (path.startsWith('/batches/')) return 'Batch details';
+    if (path === '/attendance') return 'Attendance';
+    if (path === '/fees') return 'Fees & income';
+    if (path === '/exams') return 'Exams & results';
+    if (path.includes('/marks')) return 'Marks entry';
+    if (path === '/results') return 'Results';
+    if (path === '/reports') return 'Reports';
+    if (path === '/users') return 'All User';
+    if (path === '/users/create') return 'Create New User';
+    if (path === '/settings') return 'Settings';
+    return 'Workspace';
+  };
+
   const { data: user, isLoading, isError } = useQuery({
     queryKey: ['me'],
     queryFn: async () => (await api.get('/auth/me')).data.user,
@@ -57,6 +83,14 @@ function App() {
     { to: '/fees', label: 'Fees & income', icon: CreditCard },
     { to: '/exams', label: 'Exams & results', icon: ClipboardList },
     { to: '/reports', label: 'Reports', icon: ChartNoAxesCombined },
+    {
+      label: 'User',
+      icon: ShieldCheck,
+      sublinks: [
+        { to: '/users/create', label: 'Create New User', icon: UserPlus },
+        { to: '/users', label: 'All User', icon: Users },
+      ],
+    },
     { to: '/settings', label: 'Settings', icon: Settings },
   ];
 
@@ -73,11 +107,51 @@ function App() {
         </Link>
         <div className="workspace-tag">WORKSPACE</div>
         <nav className="side-nav">
-          {links.map(({ to, label, icon: Icon, end }) => (
-            <NavLink key={to} to={to} end={end} onClick={() => setMobileOpen(false)} title={collapsed ? label : undefined}>
-              <Icon size={19} strokeWidth={1.8} /><span>{label}</span>{label === 'Students' && <span className="nav-dot" />}
-            </NavLink>
-          ))}
+          {links.map((item) => {
+            if (item.sublinks) {
+              const isSubActive = location.pathname.startsWith('/users');
+              return (
+                <div key={item.label} className="nav-group">
+                  <button
+                    type="button"
+                    className={`nav-group-trigger ${isSubActive ? 'active-parent' : ''}`}
+                    onClick={() => {
+                      if (collapsed) setCollapsed(false);
+                      setUserMenuOpen(!userMenuOpen);
+                    }}
+                    title={collapsed ? item.label : undefined}
+                  >
+                    <item.icon size={19} strokeWidth={1.8} />
+                    <span>{item.label}</span>
+                    <ChevronDown size={14} className={`nav-arrow ${userMenuOpen ? 'rotated' : ''}`} />
+                  </button>
+                  {userMenuOpen && !collapsed && (
+                    <div className="nav-sub">
+                      {item.sublinks.map((sub) => (
+                        <NavLink
+                          key={sub.to}
+                          to={sub.to}
+                          end={sub.to === '/users'}
+                          onClick={() => setMobileOpen(false)}
+                          className={({ isActive }) => `nav-sub-link ${isActive ? 'active' : ''}`}
+                          title={sub.label}
+                        >
+                          <sub.icon size={14} strokeWidth={1.8} />
+                          <span>{sub.label}</span>
+                        </NavLink>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            return (
+              <NavLink key={item.to} to={item.to} end={item.end} onClick={() => setMobileOpen(false)} title={collapsed ? item.label : undefined}>
+                <item.icon size={19} strokeWidth={1.8} /><span>{item.label}</span>{item.label === 'Students' && <span className="nav-dot" />}
+              </NavLink>
+            );
+          })}
         </nav>
         <div className="sidebar-bottom">
           <div className="help-card"><div className="help-icon"><CircleHelp size={17} /></div><strong>Need a hand?</strong><span>Visit the quick guide for help getting started.</span><button onClick={() => window.open('https://laravel.com/docs', '_blank')}>Open quick guide <ChevronRight size={14} /></button></div>
@@ -90,7 +164,7 @@ function App() {
           <div className="topbar-left">
             <button className="icon-button menu-toggle" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu size={20} /></button>
             <button className="icon-button collapse-toggle" onClick={() => setCollapsed(!collapsed)} aria-label="Collapse sidebar"><ChevronLeft size={18} /></button>
-            <div><div className="breadcrumbs"><span>Workspace</span><ChevronRight size={13} /><strong>{links.find((item) => item.to === location.pathname)?.label || 'Student profile'}</strong></div><h1>{links.find((item) => item.to === location.pathname)?.label || 'Student profile'}</h1></div>
+            <div><div className="breadcrumbs"><span>Workspace</span><ChevronRight size={13} /><strong>{getBreadcrumbTitle(location.pathname)}</strong></div><h1>{getBreadcrumbTitle(location.pathname)}</h1></div>
           </div>
           <div className="topbar-actions">
             <GlobalSearch />
@@ -111,6 +185,8 @@ function App() {
             <Route path="/exams/:id/marks" element={<MarksEntry />} />
             <Route path="/results" element={<Results />} />
             <Route path="/reports" element={<Reports />} />
+            <Route path="/users" element={<AllUsers currentUser={user} />} />
+            <Route path="/users/create" element={<CreateUser />} />
             <Route path="/settings" element={<SettingsPage user={user} />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
@@ -256,7 +332,8 @@ function StudentForm({ student, onClose, onSaved }) {
     setError('');
     try {
       let response;
-      if (values.photo?.[0]) {
+      const hasPhoto = values.photo && values.photo[0] instanceof File;
+      if (hasPhoto) {
         const form = new FormData();
         Object.entries(values).forEach(([key, value]) => {
           if (key === 'photo') form.append('photo', value[0]);
@@ -269,7 +346,12 @@ function StudentForm({ student, onClose, onSaved }) {
           response = await api.post('/students', form);
         }
       } else {
-        response = student ? await api.put(`/students/${student.id}`, values) : await api.post('/students', values);
+        const payload = { ...values };
+        delete payload.photo;
+        Object.keys(payload).forEach((k) => {
+          if (payload[k] === '') payload[k] = null;
+        });
+        response = student ? await api.put(`/students/${student.id}`, payload) : await api.post('/students', payload);
       }
       onSaved(responseData(response));
     } catch (reason) { setError(messageFromError(reason)); }
@@ -284,13 +366,13 @@ function StudentForm({ student, onClose, onSaved }) {
       <Field label="Student phone"><input {...register('phone')} placeholder="01XXXXXXXXX" /></Field>
       <Field label="Gender"><select {...register('gender')}><option value="">Not specified</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select></Field>
       <Field label="Date of birth"><input type="date" {...register('date_of_birth')} /></Field>
-      <Field label="Student photo"><input type="file" accept="image/jpeg,image/png,image/webp" {...register('photo')} /></Field>
+      <Field label="Student photo (optional)"><input type="file" accept="image/jpeg,image/png,image/webp" {...register('photo')} /></Field>
     </div>
-    <div className="form-section-title">Parent / guardian</div><div className="form-grid">
-      <Field label="Father’s name" required error={errors.father_name?.message}><input {...register('father_name', { required: 'Father’s name is required.' })} /></Field>
-      <Field label="Father’s phone" required error={errors.father_phone?.message}><input {...register('father_phone', { required: 'Father’s phone is required.' })} placeholder="01XXXXXXXXX" /></Field>
-      <Field label="Mother’s name" required error={errors.mother_name?.message}><input {...register('mother_name', { required: 'Mother’s name is required.' })} /></Field>
-      <Field label="Mother’s phone"><input {...register('mother_phone')} placeholder="01XXXXXXXXX" /></Field>
+    <div className="form-section-title">Parent / guardian (Optional)</div><div className="form-grid">
+      <Field label="Father’s name"><input {...register('father_name')} placeholder="Father’s name (optional)" /></Field>
+      <Field label="Father’s phone"><input {...register('father_phone')} placeholder="01XXXXXXXXX (optional)" /></Field>
+      <Field label="Mother’s name"><input {...register('mother_name')} placeholder="Mother’s name (optional)" /></Field>
+      <Field label="Mother’s phone"><input {...register('mother_phone')} placeholder="01XXXXXXXXX (optional)" /></Field>
     </div>
     <div className="form-section-title">Admission details</div><div className="form-grid">
       <Field label="Admission date" required><input type="date" {...register('admission_date', { required: true })} /></Field>
@@ -743,6 +825,322 @@ function TableSkeleton() {
 
 function Toast({ toast }) {
   return <div className={`toast ${toast.kind}`}><span>{toast.kind === 'error' ? <X size={16} /> : <Check size={16} />}</span>{toast.message}</div>;
+}
+
+function AllUsers({ currentUser }) {
+  const queryClient = useQueryClient();
+  const { toast, notify } = useToast();
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['users', { page, search }],
+    queryFn: async () => (await api.get('/users', { params: { page, search } })).data,
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: (userId) => api.delete(`/users/${userId}`),
+    onSuccess: () => {
+      notify('User deleted successfully.');
+      setDeleteTarget(null);
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: (error) => {
+      notify(messageFromError(error), 'error');
+      setDeleteTarget(null);
+    },
+  });
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="SYSTEM ADMINISTRATORS"
+        title="All User"
+        subtitle="Review and manage user accounts with administrative access to the platform."
+        action={
+          <Link className="button button-primary" to="/users/create">
+            <Plus size={16} /> Create New User
+          </Link>
+        }
+      />
+      {toast && <Toast toast={toast} />}
+
+      <section className="card data-card">
+        <div className="table-toolbar">
+          <div className="toolbar-search">
+            <Search size={16} />
+            <input
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Search user by name or email…"
+            />
+            {search && (
+              <button
+                className="icon-button"
+                aria-label="Clear search"
+                onClick={() => setSearch('')}
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          <span className="result-count">{data?.meta?.total ?? data?.data?.length ?? 0} users</span>
+        </div>
+
+        {isLoading ? (
+          <TableSkeleton />
+        ) : isError ? (
+          <ErrorPage />
+        ) : data?.data?.length ? (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>USER</th>
+                  <th>EMAIL</th>
+                  <th>ROLE</th>
+                  <th>JOINED</th>
+                  <th style={{ textAlign: 'right' }}>ACTION</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.data.map((u) => {
+                  const isSelf = currentUser?.id === u.id;
+                  return (
+                    <tr key={u.id}>
+                      <td>
+                        <div className="student-cell">
+                          <span className="avatar avatar-small">{initials(u.name)}</span>
+                          <div>
+                            <strong>{u.name}</strong>
+                            {isSelf && (
+                              <small style={{ color: '#4779e8', marginLeft: 6, fontWeight: 600 }}>
+                                (You)
+                              </small>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td>{u.email}</td>
+                      <td>
+                        <span className={`status-pill ${u.role === 'admin' ? 'active' : 'draft'}`}>
+                          {u.role === 'admin' ? 'Administrator' : u.role}
+                        </span>
+                      </td>
+                      <td>{fmtDate(u.created_at)}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        {isSelf ? (
+                          <span className="muted" style={{ fontSize: '10px' }}>Current user</span>
+                        ) : (
+                          <button
+                            className="button button-quiet button-small"
+                            style={{ color: '#c75349' }}
+                            onClick={() => setDeleteTarget(u)}
+                            title={`Delete ${u.name}`}
+                          >
+                            <Trash2 size={14} /> Delete
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState
+            title="No users found"
+            text="No administrator accounts match your search."
+            action={
+              <Link className="button button-outline button-small" to="/users/create">
+                <Plus size={14} /> Add new user
+              </Link>
+            }
+          />
+        )}
+        <Pagination meta={data?.meta} page={page} setPage={setPage} />
+      </section>
+
+      {deleteTarget && (
+        <Modal title="Delete Administrator" onClose={() => setDeleteTarget(null)}>
+          <p style={{ margin: '0 0 16px', fontSize: '12px', color: '#526178', lineHeight: 1.6 }}>
+            Are you sure you want to delete administrator <strong>{deleteTarget.name}</strong> ({deleteTarget.email})? This user will immediately lose access to the system.
+          </p>
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="button button-outline button-small"
+              onClick={() => setDeleteTarget(null)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="button button-primary button-small"
+              style={{ background: '#d9534f', borderColor: '#d9534f' }}
+              disabled={deleteUserMutation.isPending}
+              onClick={() => deleteUserMutation.mutate(deleteTarget.id)}
+            >
+              {deleteUserMutation.isPending ? 'Deleting…' : 'Delete user'}
+            </button>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
+function CreateUser() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { toast, notify } = useToast();
+  const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  const schema = z
+    .object({
+      name: z.string().min(2, 'Name must be at least 2 characters.').max(255),
+      email: z.string().email('Enter a valid email address.'),
+      password: z.string().min(8, 'Password must be at least 8 characters.'),
+      password_confirmation: z.string().min(8, 'Confirm your password.'),
+      role: z.enum(['admin', 'staff']).default('admin'),
+    })
+    .refine((data) => data.password === data.password_confirmation, {
+      message: 'Passwords do not match.',
+      path: ['password_confirmation'],
+    });
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm({
+    resolver: zodResolver(schema),
+    defaultValues: { role: 'admin' },
+  });
+
+  const submit = handleSubmit(async (values) => {
+    setError('');
+    try {
+      await api.post('/users', {
+        name: values.name,
+        email: values.email,
+        password: values.password,
+        role: values.role,
+      });
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+      notify('Administrator created successfully!');
+      reset();
+      navigate('/users');
+    } catch (reason) {
+      setError(messageFromError(reason));
+    }
+  });
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="ADMINISTRATION"
+        title="Create New User"
+        subtitle="Create an administrator account to grant access to the website dashboard."
+        action={
+          <Link className="button button-outline" to="/users">
+            <ArrowLeft size={15} /> Back to All User
+          </Link>
+        }
+      />
+      {toast && <Toast toast={toast} />}
+      {error && <div className="form-alert">{error}</div>}
+
+      <div className="card settings-card" style={{ maxWidth: 680 }}>
+        <div className="card-heading">
+          <div>
+            <h3>Administrator credentials</h3>
+            <p>New administrators can sign in at the login page using this email and password.</p>
+          </div>
+          <ShieldCheck size={20} style={{ color: '#4779e8' }} />
+        </div>
+
+        <form onSubmit={submit} className="form-stack">
+          <Field label="Full name" required error={errors.name?.message}>
+            <input
+              placeholder="e.g. Tanvir Ahmed"
+              autoComplete="name"
+              {...register('name')}
+            />
+          </Field>
+
+          <Field label="Email address" required error={errors.email?.message}>
+            <input
+              type="email"
+              placeholder="e.g. admin@tabassumenglish.com"
+              autoComplete="username"
+              {...register('email')}
+            />
+          </Field>
+
+          <div className="form-grid">
+            <Field label="Password" required error={errors.password?.message}>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Min 8 characters"
+                  autoComplete="new-password"
+                  {...register('password')}
+                  style={{ paddingRight: 36 }}
+                />
+                <button
+                  type="button"
+                  className="icon-button"
+                  style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', padding: 4 }}
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label="Toggle password visibility"
+                >
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+            </Field>
+
+            <Field label="Confirm password" required error={errors.password_confirmation?.message}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Confirm password"
+                autoComplete="new-password"
+                {...register('password_confirmation')}
+              />
+            </Field>
+          </div>
+
+          <Field label="Account role" required error={errors.role?.message}>
+            <select {...register('role')}>
+              <option value="admin">Administrator (Full Access)</option>
+              <option value="staff">Staff (Limited Access)</option>
+            </select>
+          </Field>
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+            <button
+              type="submit"
+              className="button button-primary"
+              disabled={isSubmitting}
+            >
+              <UserPlus size={15} />
+              {isSubmitting ? 'Creating admin…' : 'Create Admin User'}
+            </button>
+            <Link to="/users" className="button button-outline">
+              Cancel
+            </Link>
+          </div>
+        </form>
+      </div>
+    </>
+  );
 }
 
 function Pagination({ meta, page, setPage }) {
