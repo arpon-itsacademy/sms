@@ -340,3 +340,30 @@ html[data-font-size="extra_large"] .button { font-size: 15.5px !important; heigh
     grid-template-columns: 1fr;
   }
 }
+
+/* --- Attendance History Filter Styles --- */
+.history-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 14px 17px;
+  background: #fbfcfe;
+  border-bottom: 1px solid #edf0f5;
+}
+.history-filter-row select,
+.history-filter-row input {
+  height: 36px !important;
+  border: 1px solid #e2e7ef !important;
+  border-radius: 6px !important;
+  padding: 0 10px !important;
+  background: #ffffff !important;
+  color: #3b4b62 !important;
+  font-size: 13px !important;
+  outline: none !important;
+}
+.history-filter-row select:focus,
+.history-filter-row input:focus {
+  border-color: #4779e8 !important;
+  box-shadow: 0 0 0 3px rgba(71, 121, 232, 0.12) !important;
+}

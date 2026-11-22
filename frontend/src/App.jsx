@@ -33,6 +33,7 @@ function App() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const getActiveMenuFromPath = (path) => {
+    if (path.startsWith('/attendance')) return 'Attendance';
     if (path.startsWith('/sms')) return 'SMS Operation';
     if (path.startsWith('/users')) return 'User';
     if (path.startsWith('/appearance')) return 'Appearance';
@@ -55,7 +56,9 @@ function App() {
     if (path.startsWith('/students/')) return 'Student profile';
     if (path === '/batches') return 'Batches';
     if (path.startsWith('/batches/')) return 'Batch details';
-    if (path === '/attendance') return 'Attendance';
+    if (path === '/attendance/take' || path === '/attendance') return 'Take Attendance';
+    if (path === '/attendance/history') return 'Attendance History';
+    if (path.startsWith('/attendance')) return 'Attendance';
     if (path === '/fees') return 'Fees & income';
     if (path === '/exams') return 'Exams & results';
     if (path.includes('/marks')) return 'Marks entry';
@@ -116,7 +119,14 @@ function App() {
     { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
     { to: '/students', label: 'Students', icon: Users },
     { to: '/batches', label: 'Batches', icon: BookOpen },
-    { to: '/attendance', label: 'Attendance', icon: CalendarCheck },
+    {
+      label: 'Attendance',
+      icon: CalendarCheck,
+      sublinks: [
+        { to: '/attendance/take', label: 'Take Attendance', icon: CalendarCheck },
+        { to: '/attendance/history', label: 'Attendance History', icon: CalendarDays },
+      ],
+    },
     { to: '/fees', label: 'Fees & income', icon: CreditCard },
     { to: '/exams', label: 'Exams & results', icon: ClipboardList },
     { to: '/reports', label: 'Reports', icon: ChartNoAxesCombined },
@@ -246,7 +256,9 @@ function App() {
             <Route path="/students/:id" element={<StudentProfile />} />
             <Route path="/batches" element={<Batches />} />
             <Route path="/batches/:id" element={<BatchDetails />} />
-            <Route path="/attendance" element={<AttendancePage />} />
+            <Route path="/attendance" element={<Navigate to="/attendance/take" replace />} />
+            <Route path="/attendance/take" element={<TakeAttendancePage />} />
+            <Route path="/attendance/history" element={<AttendanceHistoryPage />} />
             <Route path="/fees" element={<FeesPage />} />
             <Route path="/exams" element={<Exams />} />
             <Route path="/exams/:id/marks" element={<MarksEntry />} />
@@ -339,7 +351,7 @@ function Dashboard() {
       <section className="card chart-card"><div className="card-heading"><div><h3>Attendance overview</h3><p>Daily attendance · last 7 days</p></div><span className="pill pill-blue">This week</span></div>
         <div className="chart-wrap">{data.attendance_week.length ? <ResponsiveContainer width="100%" height="100%"><AreaChart data={data.attendance_week} margin={{ top: 10, right: 12, left: -18, bottom: 0 }}><defs><linearGradient id="presentFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4c7df0" stopOpacity={0.2} /><stop offset="100%" stopColor="#4c7df0" stopOpacity={0} /></linearGradient></defs><CartesianGrid stroke="#eef1f6" vertical={false} /><XAxis dataKey="date" tickFormatter={(value) => new Date(`${value}T00:00:00`).toLocaleDateString('en', { weekday: 'short' })} axisLine={false} tickLine={false} tick={{ fill: '#8490a3', fontSize: 12 }} /><YAxis axisLine={false} tickLine={false} tick={{ fill: '#8490a3', fontSize: 11 }} allowDecimals={false} /><Tooltip /><Area type="monotone" dataKey="present" name="Present" stroke="#4c7df0" strokeWidth={2.5} fill="url(#presentFill)" /><Area type="monotone" dataKey="late" name="Late" stroke="#35b78a" strokeWidth={2} fill="transparent" /></AreaChart></ResponsiveContainer> : <EmptyState title="No attendance yet" text="Saved attendance will appear here." />}</div>
       </section>
-      <section className="card schedule-card"><div className="card-heading"><div><h3>Today’s schedule</h3><p>{data.today_schedule.length} classes scheduled today</p></div><Link className="text-link" to="/attendance">Take attendance <ChevronRight size={15} /></Link></div>
+      <section className="card schedule-card"><div className="card-heading"><div><h3>Today’s schedule</h3><p>{data.today_schedule.length} classes scheduled today</p></div><Link className="text-link" to="/attendance/take">Take attendance <ChevronRight size={15} /></Link></div>
         <div className="schedule-list">{data.today_schedule.length ? data.today_schedule.map((item) => <div className="schedule-row" key={`${item.id}-${item.start_time}`}><span className="schedule-time">{fmtTime(item.start_time)}<small>{fmtTime(item.end_time)}</small></span><span className="schedule-line" /><span className="schedule-info"><strong>{item.name}</strong><small>{item.subject || 'General class'}</small></span></div>) : <EmptyState title="A clear calendar" text="No classes are scheduled for today." />}</div>
       </section>
       <section className="card table-card"><div className="card-heading"><div><h3>Recent admissions</h3><p>Your newest students</p></div><Link className="text-link" to="/students">View all <ChevronRight size={15} /></Link></div>
@@ -630,20 +642,19 @@ function RecordPaymentModal({ invoice, onClose, onSaved }) {
   </form></Modal>;
 }
 
-function AttendancePage() {
+function TakeAttendancePage() {
   const [batchId, setBatchId] = useState('');
   const [date, setDate] = useState(dateToday());
   const [rows, setRows] = useState([]);
   const [error, setError] = useState('');
-  const [historyFilters, setHistoryFilters] = useState({ batch_id: '', student_id: '', from: '', to: '', status: '' });
   const { toast, notify } = useToast();
   const queryClient = useQueryClient();
-  const { data: batches } = useQuery({ queryKey: ['batches', 'active'], queryFn: async () => (await api.get('/batches', { params: { status: 'active', per_page: 100 } })).data.data });
-  const { data: students } = useQuery({ queryKey: ['students', 'attendance-filter'], queryFn: async () => (await api.get('/students', { params: { per_page: 100 } })).data.data });
-  const { data: history, isLoading } = useQuery({
-    queryKey: ['attendance-history', historyFilters],
-    queryFn: async () => (await api.get('/attendance/history', { params: Object.fromEntries(Object.entries(historyFilters).filter(([, value]) => value)) })).data,
+
+  const { data: batches } = useQuery({
+    queryKey: ['batches', 'active'],
+    queryFn: async () => (await api.get('/batches', { params: { status: 'active', per_page: 100 } })).data.data,
   });
+
   const load = async () => {
     setError('');
     if (!batchId) { setError('Choose a batch first.'); return; }
@@ -652,26 +663,273 @@ function AttendancePage() {
       setRows(response.data.students.map((student) => ({ ...student, status: student.status || '', remarks: student.remarks || '' })));
     } catch (reason) { setError(messageFromError(reason)); }
   };
+
   const updateRow = (id, key, value) => setRows(rows.map((row) => row.id === id ? { ...row, [key]: value } : row));
+
   const save = async () => {
     try {
-      await api.put('/attendance-sessions', { batch_id: Number(batchId), session_date: date, records: rows.map(({ id, status, remarks }) => ({ student_id: id, status: status || null, remarks: remarks || null })) });
+      await api.put('/attendance-sessions', {
+        batch_id: Number(batchId),
+        session_date: date,
+        records: rows.map(({ id, status, remarks }) => ({ student_id: id, status: status || null, remarks: remarks || null }))
+      });
       notify('Attendance saved successfully.');
       queryClient.invalidateQueries({ queryKey: ['attendance-history'] });
       await load();
     } catch (reason) { setError(messageFromError(reason)); }
   };
-  return <>
-    <PageHeading eyebrow="CLASSROOM TRACKER" title="Attendance" subtitle="Record and review attendance for each class session." />
-    {toast && <Toast toast={toast} />}
-    <section className="card attendance-filter"><div><div className="form-section-title">Take attendance</div><p>Select a batch and date to load students enrolled on that day.</p></div><div className="attendance-controls"><Field label="Batch"><select value={batchId} onChange={(event) => setBatchId(event.target.value)}><option value="">Select batch…</option>{batches?.map((batch) => <option key={batch.id} value={batch.id}>{batch.name}</option>)}</select></Field><Field label="Class date"><input type="date" value={date} max={dateToday()} onChange={(event) => setDate(event.target.value)} /></Field><button className="button button-primary" onClick={load}>Load students</button></div></section>
-    {error && <div className="form-alert">{error}</div>}
-    {!!rows.length && <section className="card data-card attendance-card"><div className="table-toolbar"><div><h3>{batches?.find((batch) => String(batch.id) === String(batchId))?.name} <span className="dot-separator">·</span> {fmtDate(date)}</h3><p>{rows.length} enrolled students</p></div><div className="toolbar-controls"><button className="button button-outline button-small" onClick={() => setRows(rows.map((row) => ({ ...row, status: 'present' })))}>Mark all present</button><button className="button button-outline button-small" onClick={() => setRows(rows.map((row) => ({ ...row, status: 'absent' })))}>Mark all absent</button><button className="button button-quiet button-small" onClick={load}>Reset changes</button></div></div><div className="table-scroll"><table><thead><tr><th>STUDENT</th><th>ROLL</th><th>ATTENDANCE STATUS</th><th>REMARKS</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td><span className="student-cell"><span className="avatar">{initials(row.name)}</span><strong>{row.name}</strong></span></td><td className="mono">{row.roll_number}</td><td><select className={`attendance-select ${row.status}`} value={row.status} onChange={(event) => updateRow(row.id, 'status', event.target.value)}><option value="">Unmarked</option><option value="present">Present</option><option value="absent">Absent</option><option value="late">Late</option><option value="excused">Excused</option></select></td><td><input className="table-input" value={row.remarks} placeholder="Optional note" onChange={(event) => updateRow(row.id, 'remarks', event.target.value)} /></td></tr>)}</tbody></table></div><div className="table-footer"><span>Unmarked students are not counted in attendance statistics.</span><button className="button button-primary" onClick={save}><Check size={16} /> Save attendance</button></div></section>}
-    {rows.length === 0 && batchId && <div className="card empty-card"><EmptyState title="Load a class to begin" text="Choose a date and load students. New attendance starts unmarked." /></div>}
-    <section className="card data-card history-card"><div className="card-heading"><div><h3>Attendance history</h3><p>Excused and unmarked records are excluded from attendance percentages.</p></div><div className="history-stats">{!isLoading && <><span><b>{history?.summary?.present || 0}</b> Present</span><span><b>{history?.summary?.absent || 0}</b> Absent</span><span><b>{history?.summary?.percentage || 0}%</b> Attendance</span></>}</div></div>
-      <div className="history-filter-row"><select aria-label="Filter attendance by batch" value={historyFilters.batch_id} onChange={(event) => setHistoryFilters({ ...historyFilters, batch_id: event.target.value })}><option value="">All batches</option>{batches?.map((batch) => <option key={batch.id} value={batch.id}>{batch.name}</option>)}</select><select aria-label="Filter attendance by student" value={historyFilters.student_id} onChange={(event) => setHistoryFilters({ ...historyFilters, student_id: event.target.value })}><option value="">All students</option>{students?.map((student) => <option key={student.id} value={student.id}>{student.roll_number} · {student.name}</option>)}</select><input aria-label="Attendance from date" type="date" value={historyFilters.from} onChange={(event) => setHistoryFilters({ ...historyFilters, from: event.target.value })} /><input aria-label="Attendance through date" type="date" value={historyFilters.to} onChange={(event) => setHistoryFilters({ ...historyFilters, to: event.target.value })} /><select aria-label="Filter by attendance status" value={historyFilters.status} onChange={(event) => setHistoryFilters({ ...historyFilters, status: event.target.value })}><option value="">All statuses</option><option value="present">Present</option><option value="absent">Absent</option><option value="late">Late</option><option value="excused">Excused</option></select></div>
-      <AttendanceHistory rows={history?.data?.data || []} /></section>
-  </>;
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="CLASSROOM TRACKER"
+        title="Take Attendance"
+        subtitle="Select a batch and date to record attendance for each student."
+        action={
+          <Link className="button button-outline" to="/attendance/history">
+            <CalendarDays size={15} /> View Attendance History
+          </Link>
+        }
+      />
+      {toast && <Toast toast={toast} />}
+
+      <section className="card attendance-filter">
+        <div>
+          <div className="form-section-title">Select Class Session</div>
+          <p>Choose the batch and date to load enrolled students.</p>
+        </div>
+        <div className="attendance-controls">
+          <Field label="Batch">
+            <select value={batchId} onChange={(event) => { setBatchId(event.target.value); setRows([]); }}>
+              <option value="">Select batch…</option>
+              {batches?.map((batch) => <option key={batch.id} value={batch.id}>{batch.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Class date">
+            <input type="date" value={date} max={dateToday()} onChange={(event) => { setDate(event.target.value); setRows([]); }} />
+          </Field>
+          <button className="button button-primary" onClick={load}>
+            Load students
+          </button>
+        </div>
+      </section>
+
+      {error && <div className="form-alert">{error}</div>}
+
+      {!!rows.length && (
+        <section className="card data-card attendance-card">
+          <div className="table-toolbar">
+            <div>
+              <h3>
+                {batches?.find((batch) => String(batch.id) === String(batchId))?.name}{' '}
+                <span className="dot-separator">·</span> {fmtDate(date)}
+              </h3>
+              <p>{rows.length} enrolled students</p>
+            </div>
+            <div className="toolbar-controls">
+              <button className="button button-outline button-small" onClick={() => setRows(rows.map((row) => ({ ...row, status: 'present' })))}>
+                Mark all present
+              </button>
+              <button className="button button-outline button-small" onClick={() => setRows(rows.map((row) => ({ ...row, status: 'absent' })))}>
+                Mark all absent
+              </button>
+              <button className="button button-quiet button-small" onClick={load}>
+                Reset changes
+              </button>
+            </div>
+          </div>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>STUDENT</th>
+                  <th>ROLL</th>
+                  <th>ATTENDANCE STATUS</th>
+                  <th>REMARKS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.id}>
+                    <td>
+                      <span className="student-cell">
+                        <span className="avatar">{initials(row.name)}</span>
+                        <strong>{row.name}</strong>
+                      </span>
+                    </td>
+                    <td className="mono">{row.roll_number}</td>
+                    <td>
+                      <select
+                        className={`attendance-select ${row.status}`}
+                        value={row.status}
+                        onChange={(event) => updateRow(row.id, 'status', event.target.value)}
+                      >
+                        <option value="">Unmarked</option>
+                        <option value="present">Present</option>
+                        <option value="absent">Absent</option>
+                        <option value="late">Late</option>
+                        <option value="excused">Excused</option>
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        className="table-input"
+                        value={row.remarks}
+                        placeholder="Optional note"
+                        onChange={(event) => updateRow(row.id, 'remarks', event.target.value)}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="table-footer">
+            <span>Unmarked students are not counted in attendance statistics.</span>
+            <button className="button button-primary" onClick={save}>
+              <Check size={16} /> Save attendance
+            </button>
+          </div>
+        </section>
+      )}
+
+      {rows.length === 0 && batchId && (
+        <div className="card empty-card">
+          <EmptyState title="Click 'Load students' to begin" text="Students enrolled in this batch on the selected date will be loaded." />
+        </div>
+      )}
+
+      {rows.length === 0 && !batchId && (
+        <div className="card empty-card">
+          <EmptyState title="Choose a batch to start" text="Select a batch and date above, then click 'Load students' to take attendance." />
+        </div>
+      )}
+    </>
+  );
+}
+
+function AttendanceHistoryPage() {
+  const [historyFilters, setHistoryFilters] = useState({ batch_id: '', student_id: '', from: '', to: '', status: '' });
+  const { toast } = useToast();
+
+  const { data: batches } = useQuery({
+    queryKey: ['batches', 'active'],
+    queryFn: async () => (await api.get('/batches', { params: { status: 'active', per_page: 100 } })).data.data,
+  });
+
+  const { data: students } = useQuery({
+    queryKey: ['students', 'attendance-filter'],
+    queryFn: async () => (await api.get('/students', { params: { per_page: 100 } })).data.data,
+  });
+
+  const { data: history, isLoading } = useQuery({
+    queryKey: ['attendance-history', historyFilters],
+    queryFn: async () => (await api.get('/attendance/history', { params: Object.fromEntries(Object.entries(historyFilters).filter(([, value]) => value)) })).data,
+  });
+
+  const resetFilters = () => {
+    setHistoryFilters({ batch_id: '', student_id: '', from: '', to: '', status: '' });
+  };
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="CLASSROOM TRACKER"
+        title="Attendance History"
+        subtitle="Review past attendance records, trends, and individual student logs."
+        action={
+          <Link className="button button-primary" to="/attendance/take">
+            <CalendarCheck size={15} /> Take Attendance
+          </Link>
+        }
+      />
+      {toast && <Toast toast={toast} />}
+
+      <section className="card data-card history-card" style={{ marginTop: 0 }}>
+        <div className="card-heading">
+          <div>
+            <h3>Attendance Log & Summary</h3>
+            <p>Excused and unmarked records are excluded from attendance percentages.</p>
+          </div>
+          <div className="history-stats">
+            {!isLoading && (
+              <>
+                <span><b>{history?.summary?.present || 0}</b> Present</span>
+                <span><b>{history?.summary?.absent || 0}</b> Absent</span>
+                <span><b>{history?.summary?.percentage || 0}%</b> Attendance</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="history-filter-row">
+          <select
+            aria-label="Filter attendance by batch"
+            value={historyFilters.batch_id}
+            onChange={(event) => setHistoryFilters({ ...historyFilters, batch_id: event.target.value })}
+            style={{ minWidth: '150px' }}
+          >
+            <option value="">All batches</option>
+            {batches?.map((batch) => <option key={batch.id} value={batch.id}>{batch.name}</option>)}
+          </select>
+
+          <select
+            aria-label="Filter attendance by student"
+            value={historyFilters.student_id}
+            onChange={(event) => setHistoryFilters({ ...historyFilters, student_id: event.target.value })}
+            style={{ minWidth: '180px' }}
+          >
+            <option value="">All students</option>
+            {students?.map((student) => <option key={student.id} value={student.id}>{student.roll_number} · {student.name}</option>)}
+          </select>
+
+          <input
+            aria-label="Attendance from date"
+            type="date"
+            value={historyFilters.from}
+            onChange={(event) => setHistoryFilters({ ...historyFilters, from: event.target.value })}
+            title="From Date"
+          />
+
+          <input
+            aria-label="Attendance through date"
+            type="date"
+            value={historyFilters.to}
+            onChange={(event) => setHistoryFilters({ ...historyFilters, to: event.target.value })}
+            title="To Date"
+          />
+
+          <select
+            aria-label="Filter by attendance status"
+            value={historyFilters.status}
+            onChange={(event) => setHistoryFilters({ ...historyFilters, status: event.target.value })}
+          >
+            <option value="">All statuses</option>
+            <option value="present">Present</option>
+            <option value="absent">Absent</option>
+            <option value="late">Late</option>
+            <option value="excused">Excused</option>
+          </select>
+
+          {(historyFilters.batch_id || historyFilters.student_id || historyFilters.from || historyFilters.to || historyFilters.status) && (
+            <button type="button" className="button button-quiet button-small" onClick={resetFilters}>
+              Clear filters
+            </button>
+          )}
+        </div>
+
+        {isLoading ? (
+          <TableSkeleton />
+        ) : (
+          <AttendanceHistory rows={history?.data?.data || []} />
+        )}
+      </section>
+    </>
+  );
+}
+
+function AttendancePage() {
+  return <Navigate to="/attendance/take" replace />;
 }
 
 function Exams() {
@@ -772,7 +1030,7 @@ function Reports() {
   const { data: students, isLoading } = useQuery({ queryKey: ['report-students', classLevel, schoolName, batchId, admittedFrom, admittedTo], queryFn: async () => (await api.get('/reports/students', { params: filters })).data });
   return <>
     <PageHeading eyebrow="INSIGHTS & EXPORTS" title="Reports" subtitle="Filter student records and download practical CSV reports." />
-    <div className="report-cards"><div className="card report-card"><span className="report-icon report-blue"><Users size={18} /></span><h3>Student directory</h3><p>Export admission and contact records. Filters apply to the download.</p><button className="button button-outline button-small" onClick={exportStudents}>Download student CSV <ArrowDownToLine size={15} /></button></div><div className="card report-card"><span className="report-icon report-green"><CalendarCheck size={18} /></span><h3>Attendance summary</h3><p>Review recorded attendance across classes and dates.</p><div className="report-actions"><Link className="button button-outline button-small" to="/attendance">Open attendance history <ChevronRight size={15} /></Link><button className="button button-outline button-small" onClick={() => window.open(`${API_ORIGIN}/api/reports/attendance?export=1`, '_blank')}>Download CSV <ArrowDownToLine size={15} /></button></div></div><div className="card report-card"><span className="report-icon report-violet"><ClipboardList size={18} /></span><h3>Exam results</h3><p>Review marks, percentages, and student performance.</p><div className="report-actions"><Link className="button button-outline button-small" to="/results">Open exam results <ChevronRight size={15} /></Link><button className="button button-outline button-small" onClick={() => window.open(`${API_ORIGIN}/api/reports/exams?export=1`, '_blank')}>Download CSV <ArrowDownToLine size={15} /></button></div></div></div>
+    <div className="report-cards"><div className="card report-card"><span className="report-icon report-blue"><Users size={18} /></span><h3>Student directory</h3><p>Export admission and contact records. Filters apply to the download.</p><button className="button button-outline button-small" onClick={exportStudents}>Download student CSV <ArrowDownToLine size={15} /></button></div><div className="card report-card"><span className="report-icon report-green"><CalendarCheck size={18} /></span><h3>Attendance summary</h3><p>Review recorded attendance across classes and dates.</p><div className="report-actions"><Link className="button button-outline button-small" to="/attendance/history">Open attendance history <ChevronRight size={15} /></Link><button className="button button-outline button-small" onClick={() => window.open(`${API_ORIGIN}/api/reports/attendance?export=1`, '_blank')}>Download CSV <ArrowDownToLine size={15} /></button></div></div><div className="card report-card"><span className="report-icon report-violet"><ClipboardList size={18} /></span><h3>Exam results</h3><p>Review marks, percentages, and student performance.</p><div className="report-actions"><Link className="button button-outline button-small" to="/results">Open exam results <ChevronRight size={15} /></Link><button className="button button-outline button-small" onClick={() => window.open(`${API_ORIGIN}/api/reports/exams?export=1`, '_blank')}>Download CSV <ArrowDownToLine size={15} /></button></div></div></div>
     <section className="card data-card"><div className="card-heading"><div><h3>Student report preview</h3><p>Export includes the filtered student list.</p></div><button className="button button-outline button-small" onClick={exportStudents}><ArrowDownToLine size={15} /> Export CSV</button></div><div className="table-toolbar"><div className="toolbar-controls"><label className="filter-label">Class <input value={classLevel} onChange={(event) => setClassLevel(event.target.value)} placeholder="Any class" /></label><label className="filter-label">School <input value={schoolName} onChange={(event) => setSchoolName(event.target.value)} placeholder="Any school" /></label><label className="filter-label">Admitted from <input type="date" value={admittedFrom} onChange={(event) => setAdmittedFrom(event.target.value)} /></label><label className="filter-label">To <input type="date" value={admittedTo} onChange={(event) => setAdmittedTo(event.target.value)} /></label><select value={batchId} onChange={(event) => setBatchId(event.target.value)}><option value="">All batches</option>{batches?.map((batch) => <option key={batch.id} value={batch.id}>{batch.name}</option>)}</select></div><span className="result-count">{students?.meta?.total || 0} students</span></div>
       {isLoading ? <TableSkeleton /> : students?.data?.length ? <StudentTable students={students.data} /> : <EmptyState title="No matching students" text="Adjust the report filters to see student records." />}
     </section>
