@@ -94,6 +94,13 @@ class FeeController extends Controller
             ]);
         });
 
+        // Trigger automated fee payment SMS alert if enabled
+        try {
+            app(SmsAutomationController::class)->dispatchFeeAlert($payment, $monthlyFee->fresh());
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Fee payment SMS dispatch error: ' . $e->getMessage());
+        }
+
         return response()->json([
             'message' => 'Payment recorded.',
             'payment' => $payment->load('receiver:id,name'),

@@ -68,6 +68,8 @@ Route::middleware(['auth:sanctum', EnsureAdministrator::class])->group(function 
     Route::post('/settings/sms/test', [SmsSettingsController::class, 'test']);
     Route::get('/settings/sms-templates', [ExamResultSmsController::class, 'getTemplates']);
     Route::put('/settings/sms-templates', [ExamResultSmsController::class, 'updateTemplates']);
+    Route::get('/settings/sms-automation', [SmsAutomationController::class, 'getSettings']);
+    Route::put('/settings/sms-automation', [SmsAutomationController::class, 'updateSettings']);
     Route::post('/sms/preview', [BulkSmsController::class, 'preview']);
     Route::post('/sms/send-bulk', [BulkSmsController::class, 'send']);
     Route::post('/exams/{exam}/send-results/preview', [ExamResultSmsController::class, 'preview']);

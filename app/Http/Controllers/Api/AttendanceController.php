@@ -85,6 +85,13 @@ class AttendanceController extends Controller
             return $session;
         });
 
+        // Trigger automated absent SMS alert if enabled
+        try {
+            app(SmsAutomationController::class)->dispatchAbsentAlerts($session, $data['records']);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Absent SMS dispatch error: ' . $e->getMessage());
+        }
+
         return response()->json(['data' => $session->load('records.student')]);
     }
 

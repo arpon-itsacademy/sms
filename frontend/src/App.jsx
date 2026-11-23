@@ -64,6 +64,7 @@ function App() {
     if (path.includes('/marks')) return 'Marks entry';
     if (path === '/results') return 'Results';
     if (path === '/reports') return 'Reports';
+    if (path === '/sms/templates') return 'SMS Template';
     if (path === '/sms/automation') return 'SMS Automation';
     if (path === '/sms/bulk') return 'Bulk SMS';
     if (path.startsWith('/sms')) return 'SMS Operation';
@@ -136,6 +137,7 @@ function App() {
       icon: Send,
       sublinks: [
         { to: '/sms/bulk', label: 'Bulk SMS', icon: Send },
+        { to: '/sms/templates', label: 'SMS Template', icon: ClipboardList },
         { to: '/sms/automation', label: 'SMS Automation', icon: Sparkles },
       ],
     },
@@ -268,6 +270,8 @@ function App() {
             <Route path="/reports" element={<Reports />} />
             <Route path="/sms" element={<Navigate to="/sms/bulk" replace />} />
             <Route path="/sms/bulk" element={<BulkSmsPage />} />
+            <Route path="/sms/templates" element={<SmsTemplatePage />} />
+            <Route path="/sms/template" element={<Navigate to="/sms/templates" replace />} />
             <Route path="/sms/automation" element={<SmsAutomationPage />} />
             <Route path="/users" element={<AllUsers currentUser={user} />} />
             <Route path="/users/create" element={<CreateUser />} />
@@ -3101,7 +3105,7 @@ function SendResultModal({ exam, onClose }) {
   );
 }
 
-function SmsAutomationPage() {
+function SmsTemplatePage() {
   const queryClient = useQueryClient();
   const { toast, notify } = useToast();
   const textareaRef = useRef(null);
@@ -3235,8 +3239,8 @@ function SmsAutomationPage() {
     <>
       <PageHeading
         eyebrow="SMS OPERATION"
-        title="SMS Automation"
-        subtitle="Configure automated SMS templates for exam results and student notices with dynamic tags."
+        title="SMS Template"
+        subtitle="Configure templates for exam results and student notices with dynamic tags."
       />
       {toast && <Toast toast={toast} />}
 
@@ -3252,7 +3256,7 @@ function SmsAutomationPage() {
         <section className="card" style={{ padding: '20px', display: 'grid', gap: '16px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-              <Sparkles size={18} color="#2563eb" />
+              <ClipboardList size={18} color="#2563eb" />
               <strong style={{ fontSize: '15px' }}>Exam Result SMS Template</strong>
             </div>
             <p style={{ margin: 0, fontSize: '12.5px', color: '#64748b' }}>
@@ -3381,6 +3385,540 @@ function SmsAutomationPage() {
             </div>
           </div>
         </section>
+      </div>
+    </>
+  );
+}
+
+function SmsAutomationPage() {
+  const queryClient = useQueryClient();
+  const { toast, notify } = useToast();
+  const absentTextareaRef = useRef(null);
+  const feeTextareaRef = useRef(null);
+
+  const [absentEnabled, setAbsentEnabled] = useState(false);
+  const [absentRecipients, setAbsentRecipients] = useState({
+    student: false,
+    father: true,
+    mother: true,
+  });
+  const [absentTemplate, setAbsentTemplate] = useState('');
+  const [defaultAbsentTemplate, setDefaultAbsentTemplate] = useState('');
+
+  const [feeEnabled, setFeeEnabled] = useState(false);
+  const [feeRecipients, setFeeRecipients] = useState({
+    student: true,
+    father: true,
+    mother: false,
+  });
+  const [feeTemplate, setFeeTemplate] = useState('');
+  const [defaultFeeTemplate, setDefaultFeeTemplate] = useState('');
+
+  const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Fetch automation settings
+  const { data, isLoading } = useQuery({
+    queryKey: ['sms-automation-settings'],
+    queryFn: async () => {
+      const res = await api.get('/settings/sms-automation');
+      return res.data.settings;
+    },
+  });
+
+  useEffect(() => {
+    if (data) {
+      setAbsentEnabled(Boolean(data.absent_sms_enabled));
+      if (Array.isArray(data.absent_recipients)) {
+        setAbsentRecipients({
+          student: data.absent_recipients.includes('student'),
+          father: data.absent_recipients.includes('father'),
+          mother: data.absent_recipients.includes('mother'),
+        });
+      }
+      setAbsentTemplate(data.absent_template || '');
+      setDefaultAbsentTemplate(data.default_absent_template || '');
+
+      setFeeEnabled(Boolean(data.fee_sms_enabled));
+      if (Array.isArray(data.fee_recipients)) {
+        setFeeRecipients({
+          student: data.fee_recipients.includes('student'),
+          father: data.fee_recipients.includes('father'),
+          mother: data.fee_recipients.includes('mother'),
+        });
+      }
+      setFeeTemplate(data.fee_template || '');
+      setDefaultFeeTemplate(data.default_fee_template || '');
+    }
+  }, [data]);
+
+  const insertAbsentTag = (tag) => {
+    const textarea = absentTextareaRef.current;
+    if (!textarea) {
+      setAbsentTemplate((prev) => prev + tag);
+      return;
+    }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const before = absentTemplate.substring(0, start);
+    const after = absentTemplate.substring(end);
+    setAbsentTemplate(before + tag + after);
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + tag.length, start + tag.length);
+    }, 0);
+  };
+
+  const insertFeeTag = (tag) => {
+    const textarea = feeTextareaRef.current;
+    if (!textarea) {
+      setFeeTemplate((prev) => prev + tag);
+      return;
+    }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const before = feeTemplate.substring(0, start);
+    const after = feeTemplate.substring(end);
+    setFeeTemplate(before + tag + after);
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + tag.length, start + tag.length);
+    }, 0);
+  };
+
+  const handleSave = async () => {
+    setError('');
+    const activeAbsent = Object.entries(absentRecipients).filter(([_, v]) => v).map(([k]) => k);
+    const activeFee = Object.entries(feeRecipients).filter(([_, v]) => v).map(([k]) => k);
+
+    if (absentEnabled && activeAbsent.length === 0) {
+      setError('Please select at least one recipient type for Absent SMS.');
+      return;
+    }
+
+    if (feeEnabled && activeFee.length === 0) {
+      setError('Please select at least one recipient type for Fee Payment SMS.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await api.put('/settings/sms-automation', {
+        absent_sms_enabled: absentEnabled,
+        absent_recipients: activeAbsent.length ? activeAbsent : ['father'],
+        absent_template: absentTemplate.trim() || defaultAbsentTemplate,
+        fee_sms_enabled: feeEnabled,
+        fee_recipients: activeFee.length ? activeFee : ['student'],
+        fee_template: feeTemplate.trim() || defaultFeeTemplate,
+      });
+      queryClient.invalidateQueries({ queryKey: ['sms-automation-settings'] });
+      notify('SMS Automation settings saved successfully.');
+    } catch (err) {
+      setError(messageFromError(err));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleResetAbsent = () => {
+    if (defaultAbsentTemplate) {
+      setAbsentTemplate(defaultAbsentTemplate);
+      notify('Absent SMS template reset to default.');
+    }
+  };
+
+  const handleResetFee = () => {
+    if (defaultFeeTemplate) {
+      setFeeTemplate(defaultFeeTemplate);
+      notify('Fee payment SMS template reset to default.');
+    }
+  };
+
+  // Mock preview values
+  const mockAbsentValues = {
+    '{student_name}': 'Abrar Fahim',
+    '{name}': 'Abrar Fahim',
+    '{roll_number}': '101',
+    '{roll}': '101',
+    '{father_name}': 'Md. Rafiqul Islam',
+    '{mother_name}': 'Nasrin Sultana',
+    '{date}': '23 Nov 2026',
+    '{batch_name}': 'Class 12 - Elite',
+    '{batch}': 'Class 12 - Elite',
+    '{institution_name}': 'Tabassum English Coaching',
+  };
+
+  const mockFeeValues = {
+    '{student_name}': 'Abrar Fahim',
+    '{name}': 'Abrar Fahim',
+    '{roll_number}': '101',
+    '{roll}': '101',
+    '{amount}': '2,500.00',
+    '{month}': 'November',
+    '{year}': '2026',
+    '{due_amount}': '0.00',
+    '{balance}': '0.00',
+    '{trx_id}': 'TRX-00124',
+    '{batch_name}': 'Class 12 - Elite',
+    '{batch}': 'Class 12 - Elite',
+    '{institution_name}': 'Tabassum English Coaching',
+  };
+
+  const renderText = (tmpl, mock) => {
+    if (!tmpl) return '';
+    let out = tmpl;
+    for (const [k, v] of Object.entries(mock)) {
+      out = out.split(k).join(v);
+    }
+    return out;
+  };
+
+  const absentPreview = renderText(absentTemplate, mockAbsentValues);
+  const feePreview = renderText(feeTemplate, mockFeeValues);
+
+  const absentTags = [
+    { tag: '{student_name}', label: 'Student' },
+    { tag: '{roll_number}', label: 'Roll' },
+    { tag: '{date}', label: 'Date' },
+    { tag: '{batch_name}', label: 'Batch' },
+    { tag: '{institution_name}', label: 'Coaching' },
+    { tag: '{father_name}', label: 'Father' },
+  ];
+
+  const feeTags = [
+    { tag: '{student_name}', label: 'Student' },
+    { tag: '{amount}', label: 'Amount Tk' },
+    { tag: '{month}', label: 'Month' },
+    { tag: '{year}', label: 'Year' },
+    { tag: '{due_amount}', label: 'Due Tk' },
+    { tag: '{trx_id}', label: 'Trx ID' },
+    { tag: '{institution_name}', label: 'Coaching' },
+  ];
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="SMS OPERATION"
+        title="SMS Automation"
+        subtitle="Configure automatic SMS triggers for absent attendance alerts and fee payments."
+      />
+      {toast && <Toast toast={toast} />}
+
+      {error && (
+        <div className="card" style={{ background: '#fef2f2', borderColor: '#fecaca', color: '#991b1b', padding: '12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+          <AlertCircle size={16} />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gap: '24px' }}>
+        {/* Rule 1: Absent Attendance Alert */}
+        <section className="card" style={{ padding: '22px', display: 'grid', gap: '18px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <span className="pill" style={{ background: absentEnabled ? '#dcfce7' : '#f1f5f9', color: absentEnabled ? '#15803d' : '#64748b', fontWeight: 700, fontSize: '11px' }}>
+                  {absentEnabled ? 'RULE ACTIVE' : 'RULE INACTIVE'}
+                </span>
+                <strong style={{ fontSize: '16px', color: '#0f172a' }}>1. Absent Attendance Auto SMS Alert</strong>
+              </div>
+              <p style={{ margin: 0, fontSize: '12.5px', color: '#64748b' }}>
+                Take Attendance পেজে কোনো শিক্ষার্থীকে <strong>Absent</strong> মার্ক করামাত্র স্বয়ংক্রিয়ভাবে অভিভাবকের কাছে SMS চলে যাবে।
+              </p>
+            </div>
+          </div>
+
+          {/* Toggle Switch */}
+          <div
+            className={`automation-switch-wrap ${absentEnabled ? 'active' : ''}`}
+            onClick={() => setAbsentEnabled(!absentEnabled)}
+          >
+            <div>
+              <strong style={{ fontSize: '13.5px', color: absentEnabled ? '#1e40af' : '#334155', display: 'block' }}>
+                Absent Alert Auto SMS: {absentEnabled ? 'Enabled (চালু আছে)' : 'Disabled (বন্ধ আছে)'}
+              </strong>
+              <small style={{ fontSize: '12px', color: '#64748b' }}>
+                {absentEnabled
+                  ? 'উপস্থিতি নেওয়ার সময় যারা অনুপস্থিত থাকবে, তাদের নির্বাচিত নম্বরে তাৎক্ষণিক মেসেজ চলে যাবে।'
+                  : 'অনুপস্থিত শিক্ষার্থীদের ক্ষেত্রে কোনো স্বয়ংক্রিয় এসএমএস পাঠানো হবে না।'}
+              </small>
+            </div>
+            <div className={`automation-switch ${absentEnabled ? 'active' : ''}`}>
+              <div className="automation-switch-handle" />
+            </div>
+          </div>
+
+          {/* Recipients Selection */}
+          <div>
+            <label style={{ fontSize: '12px', fontWeight: 650, color: '#334155', display: 'block', marginBottom: '8px' }}>
+              Who Receives Absent SMS (কার কাছে মেসেজ যাবে):
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '10px' }}>
+              <label className={`sms-choice-card ${absentRecipients.student ? 'active' : ''}`} style={{ padding: '10px 12px' }}>
+                <input
+                  type="checkbox"
+                  checked={absentRecipients.student}
+                  onChange={(e) => setAbsentRecipients({ ...absentRecipients, student: e.target.checked })}
+                />
+                <div className="sms-choice-content">
+                  <strong>🎓 Student</strong>
+                  <small>Student mobile</small>
+                </div>
+              </label>
+              <label className={`sms-choice-card ${absentRecipients.father ? 'active' : ''}`} style={{ padding: '10px 12px' }}>
+                <input
+                  type="checkbox"
+                  checked={absentRecipients.father}
+                  onChange={(e) => setAbsentRecipients({ ...absentRecipients, father: e.target.checked })}
+                />
+                <div className="sms-choice-content">
+                  <strong>👨 Father (Guardian)</strong>
+                  <small>Father mobile</small>
+                </div>
+              </label>
+              <label className={`sms-choice-card ${absentRecipients.mother ? 'active' : ''}`} style={{ padding: '10px 12px' }}>
+                <input
+                  type="checkbox"
+                  checked={absentRecipients.mother}
+                  onChange={(e) => setAbsentRecipients({ ...absentRecipients, mother: e.target.checked })}
+                />
+                <div className="sms-choice-content">
+                  <strong>👩 Mother (Guardian)</strong>
+                  <small>Mother mobile</small>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* Template & Live Preview in two columns */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 1fr)', gap: '16px' }}>
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 650, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '6px' }}>
+                Absent SMS Template (Click tags to insert):
+              </div>
+              <div className="sms-tag-toolbar" style={{ marginBottom: '8px' }}>
+                {absentTags.map((t) => (
+                  <button
+                    key={t.tag}
+                    type="button"
+                    className="sms-tag-chip"
+                    onClick={() => insertAbsentTag(t.tag)}
+                  >
+                    {t.tag}
+                  </button>
+                ))}
+              </div>
+              <textarea
+                ref={absentTextareaRef}
+                rows={4}
+                value={absentTemplate}
+                onChange={(e) => setAbsentTemplate(e.target.value)}
+                placeholder="Absent SMS template..."
+                style={{
+                  width: '100%',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  padding: '10px 12px',
+                  fontSize: '13px',
+                  lineHeight: '1.5',
+                  fontFamily: 'inherit',
+                  outline: 'none',
+                  resize: 'vertical',
+                }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  className="button button-quiet button-small"
+                  onClick={handleResetAbsent}
+                  disabled={!defaultAbsentTemplate || absentTemplate === defaultAbsentTemplate}
+                  style={{ fontSize: '11px' }}
+                >
+                  <RefreshCw size={12} /> Reset Template
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 650, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '6px' }}>
+                Live Output Preview:
+              </div>
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px', minHeight: '90px' }}>
+                <div className="sms-bubble" style={{ fontSize: '12.5px', lineHeight: '1.5', margin: 0 }}>
+                  {absentPreview || 'Template preview...'}
+                </div>
+                <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748b', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Length: <strong>{absentPreview.length}</strong> chars</span>
+                  <span className="pill" style={{ fontSize: '10.5px' }}>
+                    {Array.from(absentPreview).some((c) => c.charCodeAt(0) > 127) ? 'Unicode' : 'GSM'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Rule 2: Fee Payment Auto SMS */}
+        <section className="card" style={{ padding: '22px', display: 'grid', gap: '18px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <span className="pill" style={{ background: feeEnabled ? '#dcfce7' : '#f1f5f9', color: feeEnabled ? '#15803d' : '#64748b', fontWeight: 700, fontSize: '11px' }}>
+                  {feeEnabled ? 'RULE ACTIVE' : 'RULE INACTIVE'}
+                </span>
+                <strong style={{ fontSize: '16px', color: '#0f172a' }}>2. Fee Payment Auto SMS Confirmation</strong>
+              </div>
+              <p style={{ margin: 0, fontSize: '12.5px', color: '#64748b' }}>
+                Fees & income পেজে কোনো শিক্ষার্থীর বেতন জমা দেওয়ার সাথে সাথেই শিক্ষার্থী বা অভিভাবকের কাছে কনফার্মেশন SMS চলে যাবে।
+              </p>
+            </div>
+          </div>
+
+          {/* Toggle Switch */}
+          <div
+            className={`automation-switch-wrap ${feeEnabled ? 'active' : ''}`}
+            onClick={() => setFeeEnabled(!feeEnabled)}
+          >
+            <div>
+              <strong style={{ fontSize: '13.5px', color: feeEnabled ? '#1e40af' : '#334155', display: 'block' }}>
+                Fee Payment Auto SMS: {feeEnabled ? 'Enabled (চালু আছে)' : 'Disabled (বন্ধ আছে)'}
+              </strong>
+              <small style={{ fontSize: '12px', color: '#64748b' }}>
+                {feeEnabled
+                  ? 'বেতন এন্ট্রি করার সাথে সাথে স্বয়ংক্রিয়ভাবে জমার রসিদ এসএমএস আকারে চলে যাবে।'
+                  : 'বেতন নেওয়ার পর কোনো স্বয়ংক্রিয় এসএমএস পাঠানো হবে না।'}
+              </small>
+            </div>
+            <div className={`automation-switch ${feeEnabled ? 'active' : ''}`}>
+              <div className="automation-switch-handle" />
+            </div>
+          </div>
+
+          {/* Recipients Selection */}
+          <div>
+            <label style={{ fontSize: '12px', fontWeight: 650, color: '#334155', display: 'block', marginBottom: '8px' }}>
+              Who Receives Fee SMS (কার কাছে মেসেজ যাবে):
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '10px' }}>
+              <label className={`sms-choice-card ${feeRecipients.student ? 'active' : ''}`} style={{ padding: '10px 12px' }}>
+                <input
+                  type="checkbox"
+                  checked={feeRecipients.student}
+                  onChange={(e) => setFeeRecipients({ ...feeRecipients, student: e.target.checked })}
+                />
+                <div className="sms-choice-content">
+                  <strong>🎓 Student</strong>
+                  <small>Student mobile</small>
+                </div>
+              </label>
+              <label className={`sms-choice-card ${feeRecipients.father ? 'active' : ''}`} style={{ padding: '10px 12px' }}>
+                <input
+                  type="checkbox"
+                  checked={feeRecipients.father}
+                  onChange={(e) => setFeeRecipients({ ...feeRecipients, father: e.target.checked })}
+                />
+                <div className="sms-choice-content">
+                  <strong>👨 Father (Guardian)</strong>
+                  <small>Father mobile</small>
+                </div>
+              </label>
+              <label className={`sms-choice-card ${feeRecipients.mother ? 'active' : ''}`} style={{ padding: '10px 12px' }}>
+                <input
+                  type="checkbox"
+                  checked={feeRecipients.mother}
+                  onChange={(e) => setFeeRecipients({ ...feeRecipients, mother: e.target.checked })}
+                />
+                <div className="sms-choice-content">
+                  <strong>👩 Mother (Guardian)</strong>
+                  <small>Mother mobile</small>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* Template & Live Preview in two columns */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 1fr)', gap: '16px' }}>
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 650, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '6px' }}>
+                Fee SMS Template (Click tags to insert):
+              </div>
+              <div className="sms-tag-toolbar" style={{ marginBottom: '8px' }}>
+                {feeTags.map((t) => (
+                  <button
+                    key={t.tag}
+                    type="button"
+                    className="sms-tag-chip"
+                    onClick={() => insertFeeTag(t.tag)}
+                  >
+                    {t.tag}
+                  </button>
+                ))}
+              </div>
+              <textarea
+                ref={feeTextareaRef}
+                rows={4}
+                value={feeTemplate}
+                onChange={(e) => setFeeTemplate(e.target.value)}
+                placeholder="Fee payment SMS template..."
+                style={{
+                  width: '100%',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  padding: '10px 12px',
+                  fontSize: '13px',
+                  lineHeight: '1.5',
+                  fontFamily: 'inherit',
+                  outline: 'none',
+                  resize: 'vertical',
+                }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  className="button button-quiet button-small"
+                  onClick={handleResetFee}
+                  disabled={!defaultFeeTemplate || feeTemplate === defaultFeeTemplate}
+                  style={{ fontSize: '11px' }}
+                >
+                  <RefreshCw size={12} /> Reset Template
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 650, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '6px' }}>
+                Live Output Preview:
+              </div>
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px', minHeight: '90px' }}>
+                <div className="sms-bubble" style={{ fontSize: '12.5px', lineHeight: '1.5', margin: 0 }}>
+                  {feePreview || 'Template preview...'}
+                </div>
+                <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748b', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Length: <strong>{feePreview.length}</strong> chars</span>
+                  <span className="pill" style={{ fontSize: '10.5px' }}>
+                    {Array.from(feePreview).some((c) => c.charCodeAt(0) > 127) ? 'Unicode' : 'GSM'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Save Bar */}
+        <div className="card" style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
+          <span style={{ fontSize: '12.5px', color: '#64748b' }}>
+            Automated SMS will be dispatched automatically using your BulkSMSBD credentials.
+          </span>
+          <button
+            type="button"
+            className="button button-primary"
+            onClick={handleSave}
+            disabled={isSaving || isLoading}
+          >
+            <Check size={16} />
+            {isSaving ? 'Saving Rules…' : 'Save Automation Rules'}
+          </button>
+        </div>
       </div>
     </>
   );
