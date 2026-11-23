@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ExamResultSmsController extends Controller
 {
@@ -151,6 +152,140 @@ class ExamResultSmsController extends Controller
             'message' => $sentCount > 0
                 ? "Successfully sent result SMS to {$sentCount} recipient(s)." . ($failedCount > 0 ? " ({$failedCount} failed)" : '')
                 : 'Failed to send result SMS: ' . implode('; ', array_slice($errors, 0, 2)),
+        ]);
+    }
+
+    /**
+     * Export exam results as an Excel-compatible CSV file with Merit Position and Batch info.
+     */
+    public function export(Request $request, Exam $exam): StreamedResponse
+    {
+        $validated = $request->validate([
+            'batch_id' => 'nullable|integer|exists:batches,id',
+        ]);
+
+        $batchId = ! empty($validated['batch_id']) ? (int) $validated['batch_id'] : null;
+        $batch = $batchId ? DB::table('batches')->where('id', $batchId)->first() : null;
+
+        $exam->loadMissing('batches');
+
+        $query = ExamResult::with(['student.batches' => function ($q) {
+            $q->whereNull('batch_student.ended_at');
+        }])->where('exam_id', $exam->id);
+
+        if ($batchId) {
+            $query->whereIn('student_id', function ($sub) use ($batchId, $exam): void {
+                $sub->select('student_id')->from('batch_student')
+                    ->where('batch_id', $batchId)
+                    ->where('assigned_at', '<=', $exam->exam_date->endOfDay())
+                    ->where(fn ($q) => $q->whereNull('ended_at')->orWhere('ended_at', '>=', $exam->exam_date->startOfDay()));
+            });
+        }
+
+        $results = $query->get();
+
+        // Calculate highest mark (among present students)
+        $presentResults = $results->filter(fn ($r) => ! $r->is_absent && $r->obtained_marks !== null);
+        $highestMark = $presentResults->max('obtained_marks');
+        $highestMarkStr = $highestMark !== null ? (string) (float) $highestMark : '—';
+
+        // Calculate merit ranks
+        $sorted = $presentResults->sortByDesc('obtained_marks')->values();
+        $ranks = [];
+        $currentRank = 1;
+        $prevMark = null;
+        foreach ($sorted as $idx => $res) {
+            if ($prevMark !== null && $res->obtained_marks < $prevMark) {
+                $currentRank = $idx + 1;
+            }
+            $ranks[$res->student_id] = $currentRank;
+            $prevMark = $res->obtained_marks;
+        }
+
+        $slugTitle = preg_replace('/[^A-Za-z0-9_-]/', '_', $exam->title);
+        $slugBatch = $batch ? preg_replace('/[^A-Za-z0-9_-]/', '_', $batch->name) : 'All_Batches';
+        $filename = "Exam_Result_{$slugTitle}_{$slugBatch}.csv";
+
+        return response()->streamDownload(function () use ($results, $exam, $ranks, $highestMarkStr, $batch): void {
+            $output = fopen('php://output', 'w');
+            // Write UTF-8 BOM so Microsoft Excel opens it correctly
+            fputs($output, "\xEF\xBB\xBF");
+
+            fputcsv($output, [
+                'Merit Position',
+                'Roll',
+                'Student Name',
+                'Batch',
+                'Obtained Marks',
+                'Total Marks',
+                'Percentage',
+                'Highest Mark',
+                'Status',
+                'Exam Title',
+                'Subject',
+                'Exam Date',
+                'Student Phone',
+                'Father Name',
+                'Father Phone',
+                'Mother Name',
+                'School Name',
+            ]);
+
+            // Sort results: present students ranked 1..N, absent students at the bottom
+            $sortedResults = $results->sort(function ($a, $b) use ($ranks) {
+                if ($a->is_absent && ! $b->is_absent) return 1;
+                if (! $a->is_absent && $b->is_absent) return -1;
+                $rankA = $ranks[$a->student_id] ?? 999999;
+                $rankB = $ranks[$b->student_id] ?? 999999;
+                return $rankA <=> $rankB;
+            });
+
+            foreach ($sortedResults as $result) {
+                $student = $result->student;
+                if (! $student) {
+                    continue;
+                }
+
+                $rankNumber = $ranks[$student->id] ?? null;
+                $meritPos = $result->is_absent
+                    ? 'Absent'
+                    : ($rankNumber ? $this->ordinal($rankNumber) : '—');
+
+                $obtained = $result->is_absent
+                    ? 'Absent'
+                    : ($result->obtained_marks !== null ? (float) $result->obtained_marks : '—');
+
+                $percentage = (! $result->is_absent && $result->obtained_marks !== null && (float) $exam->total_marks > 0)
+                    ? round(((float) $result->obtained_marks / (float) $exam->total_marks) * 100, 2) . '%'
+                    : '—';
+
+                $batchName = $batch ? $batch->name : ($exam->batches->pluck('name')->join(', ') ?: $student->batches->pluck('name')->join(', '));
+
+                fputcsv($output, [
+                    $meritPos,
+                    $student->roll_number,
+                    $student->name,
+                    $batchName,
+                    $obtained,
+                    (float) $exam->total_marks,
+                    $percentage,
+                    $highestMarkStr,
+                    $result->is_absent ? 'Absent' : ($result->obtained_marks === null ? 'Not entered' : 'Present'),
+                    $exam->title,
+                    $exam->subject,
+                    $exam->exam_date ? $exam->exam_date->toDateString() : '',
+                    $student->phone,
+                    $student->father_name,
+                    $student->father_phone,
+                    $student->mother_name,
+                    $student->school_name,
+                ]);
+            }
+
+            fclose($output);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ]);
     }
 
@@ -315,7 +450,9 @@ class ExamResultSmsController extends Controller
                 'subject' => $exam->subject,
                 'total_marks' => (float) $exam->total_marks,
                 'highest_marks' => $highestMarkStr,
+                'batches' => $exam->batches->map(fn ($b) => ['id' => $b->id, 'name' => $b->name]),
             ],
+            'batches' => $exam->batches->map(fn ($b) => ['id' => $b->id, 'name' => $b->name]),
             'total_students' => count($items),
             'total_recipients' => $totalRecipients,
             'unique_phone_count' => count($uniqueNumbers),

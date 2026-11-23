@@ -72,6 +72,7 @@ Route::middleware(['auth:sanctum', EnsureAdministrator::class])->group(function 
     Route::post('/sms/send-bulk', [BulkSmsController::class, 'send']);
     Route::post('/exams/{exam}/send-results/preview', [ExamResultSmsController::class, 'preview']);
     Route::post('/exams/{exam}/send-results', [ExamResultSmsController::class, 'send']);
+    Route::get('/exams/{exam}/export', [ExamResultSmsController::class, 'export']);
 
     Route::get('/users', [UserController::class, 'index']);
     Route::post('/users', [UserController::class, 'store']);

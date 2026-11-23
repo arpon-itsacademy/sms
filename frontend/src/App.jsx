@@ -2491,6 +2491,40 @@ function SendResultModal({ exam, onClose }) {
   const [isSending, setIsSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState(null);
 
+  const [recipientDropdownOpen, setRecipientDropdownOpen] = useState(false);
+  const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const batchesList = (previewData?.batches && previewData.batches.length > 0)
+    ? previewData.batches
+    : (exam.batches || []);
+
+  const downloadExport = async (targetBatchId = null, targetBatchName = 'All_Batches') => {
+    try {
+      setIsExporting(true);
+      const res = await api.get(`/exams/${exam.id}/export`, {
+        params: targetBatchId ? { batch_id: targetBatchId } : {},
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/csv;charset=utf-8;' }));
+      const link = document.createElement('a');
+      link.href = url;
+      const cleanTitle = (exam.title || 'Exam').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const cleanBatch = (targetBatchName || 'All_Batches').replace(/[^a-zA-Z0-9_-]/g, '_');
+      link.setAttribute('download', `Exam_Result_${cleanTitle}_${cleanBatch}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setExportDropdownOpen(false);
+      notify(`Downloaded result Excel for ${targetBatchName || 'all batches'}.`);
+    } catch (err) {
+      notify('Failed to export exam results.', 'error');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const activeRecipients = Object.entries(recipients)
     .filter(([_, v]) => v)
     .map(([k]) => k);
@@ -2608,7 +2642,17 @@ function SendResultModal({ exam, onClose }) {
           </div>
         </div>
       ) : (
-        <div style={{ display: 'grid', gap: '18px' }}>
+        <div style={{ display: 'grid', gap: '18px', position: 'relative' }}>
+          {(recipientDropdownOpen || exportDropdownOpen) && (
+            <div
+              style={{ position: 'fixed', inset: 0, zIndex: 35 }}
+              onClick={() => {
+                setRecipientDropdownOpen(false);
+                setExportDropdownOpen(false);
+              }}
+            />
+          )}
+
           {previewError && (
             <div className="card" style={{ background: '#fef2f2', borderColor: '#fecaca', color: '#991b1b', padding: '12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <AlertCircle size={16} />
@@ -2639,79 +2683,311 @@ function SendResultModal({ exam, onClose }) {
             )}
           </div>
 
-          {/* Recipient Selection */}
-          <div className="card" style={{ padding: '16px', display: 'grid', gap: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-              <div>
-                <strong style={{ fontSize: '13.5px', color: '#1e293b' }}>Select Recipients</strong>
-                <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#64748b' }}>
-                  Choose who receives the exam result SMS:
-                </p>
+          {/* Recipient Selection & Export Controls */}
+          <div className="card" style={{ padding: '16px', position: 'relative' }}>
+            <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              {/* 1. Multi-select Recipients Dropdown */}
+              <div style={{ flex: '1 1 320px', position: 'relative' }}>
+                <label style={{ fontSize: '12px', fontWeight: 650, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                  Select Recipients (Who receives SMS)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExportDropdownOpen(false);
+                    setRecipientDropdownOpen((prev) => !prev);
+                  }}
+                  style={{
+                    width: '100%',
+                    minHeight: '42px',
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    border: `1.5px solid ${recipientDropdownOpen ? '#4779e8' : '#cbd5e1'}`,
+                    background: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '10px',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <Users size={16} color="#4779e8" />
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>
+                      {activeRecipients.length === 0 ? 'No recipient selected' : `Recipients (${activeRecipients.length} of 3):`}
+                    </span>
+                    {recipients.student && (
+                      <span className="pill" style={{ background: '#eff6ff', color: '#1d4ed8', fontSize: '11px', fontWeight: 600 }}>
+                        🎓 Student
+                      </span>
+                    )}
+                    {recipients.father && (
+                      <span className="pill" style={{ background: '#eff6ff', color: '#1d4ed8', fontSize: '11px', fontWeight: 600 }}>
+                        👨 Father
+                      </span>
+                    )}
+                    {recipients.mother && (
+                      <span className="pill" style={{ background: '#eff6ff', color: '#1d4ed8', fontSize: '11px', fontWeight: 600 }}>
+                        👩 Mother
+                      </span>
+                    )}
+                  </div>
+                  <ChevronDown
+                    size={16}
+                    style={{
+                      transform: recipientDropdownOpen ? 'rotate(180deg)' : 'none',
+                      transition: 'transform 0.2s',
+                      flexShrink: 0,
+                      color: '#64748b',
+                    }}
+                  />
+                </button>
+
+                {recipientDropdownOpen && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 4px)',
+                      left: 0,
+                      right: 0,
+                      zIndex: 50,
+                      background: '#ffffff',
+                      border: '1.5px solid #dbe2ea',
+                      borderRadius: '9px',
+                      boxShadow: '0 10px 30px rgba(20, 36, 61, 0.15)',
+                      padding: '12px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        className="button button-quiet button-small"
+                        onClick={() => handlePreset('all')}
+                        style={{ fontSize: '11px' }}
+                      >
+                        Select Everyone
+                      </button>
+                      <button
+                        type="button"
+                        className="button button-quiet button-small"
+                        onClick={() => handlePreset('student')}
+                        style={{ fontSize: '11px' }}
+                      >
+                        Student Only
+                      </button>
+                      <button
+                        type="button"
+                        className="button button-quiet button-small"
+                        onClick={() => handlePreset('parents')}
+                        style={{ fontSize: '11px' }}
+                      >
+                        Parents Only
+                      </button>
+                      <button
+                        type="button"
+                        className="button button-primary button-small"
+                        style={{ marginLeft: 'auto', fontSize: '11px', padding: '4px 10px' }}
+                        onClick={() => setRecipientDropdownOpen(false)}
+                      >
+                        Done
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'grid', gap: '8px' }}>
+                      <label
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          padding: '10px 12px',
+                          borderRadius: '6px',
+                          background: recipients.student ? '#f0f5ff' : '#ffffff',
+                          border: `1px solid ${recipients.student ? '#b8d0fc' : '#edf1f7'}`,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={recipients.student}
+                          onChange={() => handleToggleRecipient('student')}
+                          style={{ width: '16px', height: '16px', accentColor: '#4779e8' }}
+                        />
+                        <div>
+                          <strong style={{ fontSize: '13px', display: 'block', color: '#1e293b' }}>Student</strong>
+                          <small style={{ fontSize: '11.5px', color: '#64748b' }}>Send SMS to student's mobile number</small>
+                        </div>
+                      </label>
+
+                      <label
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          padding: '10px 12px',
+                          borderRadius: '6px',
+                          background: recipients.father ? '#f0f5ff' : '#ffffff',
+                          border: `1px solid ${recipients.father ? '#b8d0fc' : '#edf1f7'}`,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={recipients.father}
+                          onChange={() => handleToggleRecipient('father')}
+                          style={{ width: '16px', height: '16px', accentColor: '#4779e8' }}
+                        />
+                        <div>
+                          <strong style={{ fontSize: '13px', display: 'block', color: '#1e293b' }}>Father</strong>
+                          <small style={{ fontSize: '11.5px', color: '#64748b' }}>Send SMS to father's contact number</small>
+                        </div>
+                      </label>
+
+                      <label
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          padding: '10px 12px',
+                          borderRadius: '6px',
+                          background: recipients.mother ? '#f0f5ff' : '#ffffff',
+                          border: `1px solid ${recipients.mother ? '#b8d0fc' : '#edf1f7'}`,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={recipients.mother}
+                          onChange={() => handleToggleRecipient('mother')}
+                          style={{ width: '16px', height: '16px', accentColor: '#4779e8' }}
+                        />
+                        <div>
+                          <strong style={{ fontSize: '13px', display: 'block', color: '#1e293b' }}>Mother</strong>
+                          <small style={{ fontSize: '11.5px', color: '#64748b' }}>Send SMS to mother's contact number</small>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div style={{ display: 'flex', gap: '6px' }}>
+
+              {/* 2. Export Button with Batch selection dropdown */}
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <label style={{ fontSize: '12px', fontWeight: 650, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                  Export Result (Excel / CSV)
+                </label>
                 <button
                   type="button"
-                  className="button button-outline button-small"
-                  onClick={() => handlePreset('student')}
-                  style={{ fontSize: '11px', padding: '4px 8px' }}
+                  onClick={() => {
+                    setRecipientDropdownOpen(false);
+                    setExportDropdownOpen((prev) => !prev);
+                  }}
+                  style={{
+                    height: '42px',
+                    padding: '0 16px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    borderRadius: '8px',
+                    border: `1.5px solid ${exportDropdownOpen ? '#4779e8' : '#cbd5e1'}`,
+                    background: '#ffffff',
+                    color: '#1e293b',
+                    fontWeight: 650,
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  }}
                 >
-                  Student Only
+                  <ArrowDownToLine size={16} color="#2563eb" />
+                  <span>{isExporting ? 'Downloading…' : 'Export Excel'}</span>
+                  <ChevronDown
+                    size={15}
+                    style={{
+                      transform: exportDropdownOpen ? 'rotate(180deg)' : 'none',
+                      transition: 'transform 0.2s',
+                      color: '#64748b',
+                    }}
+                  />
                 </button>
-                <button
-                  type="button"
-                  className="button button-outline button-small"
-                  onClick={() => handlePreset('parents')}
-                  style={{ fontSize: '11px', padding: '4px 8px' }}
-                >
-                  Parents Only
-                </button>
-                <button
-                  type="button"
-                  className="button button-outline button-small"
-                  onClick={() => handlePreset('all')}
-                  style={{ fontSize: '11px', padding: '4px 8px' }}
-                >
-                  Everyone
-                </button>
+
+                {exportDropdownOpen && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 4px)',
+                      right: 0,
+                      zIndex: 50,
+                      minWidth: '260px',
+                      background: '#ffffff',
+                      border: '1.5px solid #dbe2ea',
+                      borderRadius: '9px',
+                      boxShadow: '0 10px 30px rgba(20, 36, 61, 0.15)',
+                      padding: '8px',
+                      display: 'grid',
+                      gap: '4px',
+                    }}
+                  >
+                    <div style={{ padding: '6px 10px 4px', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Select Batch to Export:
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={isExporting}
+                      onClick={() => downloadExport(null, 'All_Batches')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        background: '#f0fdf4',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        fontWeight: 650,
+                        color: '#166534',
+                        fontSize: '12.5px',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = '#dcfce7')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = '#f0fdf4')}
+                    >
+                      <span>📊 All Exam Batches ({batchesList.length || 1})</span>
+                      <ArrowDownToLine size={14} color="#16a34a" />
+                    </button>
+
+                    {batchesList.map((b) => (
+                      <button
+                        key={b.id}
+                        type="button"
+                        disabled={isExporting}
+                        onClick={() => downloadExport(b.id, b.name)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          width: '100%',
+                          padding: '9px 12px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          background: 'transparent',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          fontWeight: 500,
+                          color: '#334155',
+                          fontSize: '12.5px',
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = '#f1f5f9')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <span>🎓 {b.name}</span>
+                        <ArrowDownToLine size={14} color="#94a3b8" />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-
-            <div className="sms-recipients-grid">
-              <label className={`sms-choice-card ${recipients.student ? 'active' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={recipients.student}
-                  onChange={() => handleToggleRecipient('student')}
-                />
-                <div className="sms-choice-content">
-                  <strong>Student</strong>
-                  <small>Send to student's mobile number</small>
-                </div>
-              </label>
-
-              <label className={`sms-choice-card ${recipients.father ? 'active' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={recipients.father}
-                  onChange={() => handleToggleRecipient('father')}
-                />
-                <div className="sms-choice-content">
-                  <strong>Father</strong>
-                  <small>Send to father's contact number</small>
-                </div>
-              </label>
-
-              <label className={`sms-choice-card ${recipients.mother ? 'active' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={recipients.mother}
-                  onChange={() => handleToggleRecipient('mother')}
-                />
-                <div className="sms-choice-content">
-                  <strong>Mother</strong>
-                  <small>Send to mother's contact number</small>
-                </div>
-              </label>
             </div>
           </div>
 
