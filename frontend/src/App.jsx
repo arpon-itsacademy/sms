@@ -939,9 +939,153 @@ function AttendancePage() {
   return <Navigate to="/attendance/take" replace />;
 }
 
+function ExportExamModal({ exam, onClose }) {
+  const { notify } = useToast();
+  const [isExporting, setIsExporting] = useState(false);
+  const [selectedBatchId, setSelectedBatchId] = useState(null);
+
+  // If exam has batches array, use it; otherwise fetch exam details
+  const { data: fullExam } = useQuery({
+    queryKey: ['exam-export-details', exam?.id],
+    queryFn: async () => (await api.get(`/exams/${exam.id}`)).data.data,
+    enabled: Boolean(exam?.id && (!exam.batches || exam.batches.length === 0)),
+  });
+
+  const batches = (exam?.batches && exam.batches.length > 0) ? exam.batches : (fullExam?.batches || []);
+
+  const handleDownload = async (targetBatchId = null, targetBatchName = 'All_Batches') => {
+    try {
+      setIsExporting(true);
+      setSelectedBatchId(targetBatchId);
+      const res = await api.get(`/exams/${exam.id}/export`, {
+        params: targetBatchId ? { batch_id: targetBatchId } : {},
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/csv;charset=utf-8;' }));
+      const link = document.createElement('a');
+      link.href = url;
+      const cleanTitle = (exam.title || 'Exam').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const cleanBatch = (targetBatchName || 'All_Batches').replace(/[^a-zA-Z0-9_-]/g, '_');
+      link.setAttribute('download', `Exam_Result_${cleanTitle}_${cleanBatch}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      notify(`Downloaded result Excel for ${targetBatchName || 'all batches'}.`);
+      onClose();
+    } catch (err) {
+      notify('Failed to export exam results.', 'error');
+    } finally {
+      setIsExporting(false);
+      setSelectedBatchId(null);
+    }
+  };
+
+  return (
+    <Modal title={`Export Results — ${exam.title}`} onClose={onClose}>
+      <div style={{ display: 'grid', gap: '16px' }}>
+        <div style={{ background: '#f8fafd', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 14px' }}>
+          <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.8px', color: '#64748b', fontWeight: 650 }}>Assessment Details</div>
+          <strong style={{ fontSize: '14.5px', color: '#0f172a' }}>{exam.title}</strong>
+          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '3px' }}>
+            {exam.subject} · Total marks: {exam.total_marks} · {fmtDate(exam.exam_date)}
+          </div>
+        </div>
+
+        <div>
+          <label style={{ fontSize: '12.5px', fontWeight: 650, color: '#334155', display: 'block', marginBottom: '8px' }}>
+            Choose which batch results to download:
+          </label>
+          <div style={{ display: 'grid', gap: '8px' }}>
+            <button
+              type="button"
+              disabled={isExporting}
+              onClick={() => handleDownload(null, 'All_Batches')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                width: '100%',
+                padding: '12px 14px',
+                borderRadius: '8px',
+                border: '1.5px solid #bbf7d0',
+                background: '#f0fdf4',
+                textAlign: 'left',
+                cursor: isExporting ? 'wait' : 'pointer',
+                fontWeight: 650,
+                color: '#166534',
+                fontSize: '13px',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#dcfce7')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = '#f0fdf4')}
+            >
+              <div>
+                <div>📊 All Exam Batches ({batches.length || 1})</div>
+                <small style={{ fontSize: '11px', color: '#15803d', fontWeight: 400 }}>
+                  Combined merit list & ranks across all participating batches
+                </small>
+              </div>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#16a34a' }}>
+                <ArrowDownToLine size={15} />
+                {isExporting && selectedBatchId === null ? 'Exporting…' : 'Download'}
+              </span>
+            </button>
+
+            {batches.map((batch) => (
+              <button
+                key={batch.id}
+                type="button"
+                disabled={isExporting}
+                onClick={() => handleDownload(batch.id, batch.name)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  width: '100%',
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #e2e8f0',
+                  background: '#ffffff',
+                  textAlign: 'left',
+                  cursor: isExporting ? 'wait' : 'pointer',
+                  fontWeight: 600,
+                  color: '#1e293b',
+                  fontSize: '13px',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = '#f8fafc')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = '#ffffff')}
+              >
+                <div>
+                  <div>🎓 {batch.name}</div>
+                  <small style={{ fontSize: '11px', color: '#64748b', fontWeight: 400 }}>
+                    Merit list and marks for this batch only
+                  </small>
+                </div>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#2563eb' }}>
+                  <ArrowDownToLine size={15} />
+                  {isExporting && selectedBatchId === batch.id ? 'Exporting…' : 'Download'}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="modal-actions" style={{ justifyContent: 'flex-end', marginTop: '6px' }}>
+          <button type="button" className="button button-quiet" onClick={onClose} disabled={isExporting}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function Exams() {
   const [modal, setModal] = useState(false);
   const [sendResultExam, setSendResultExam] = useState(null);
+  const [exportExam, setExportExam] = useState(null);
   const [term, setTerm] = useState('');
   const { toast, notify } = useToast();
   const queryClient = useQueryClient();
@@ -951,10 +1095,11 @@ function Exams() {
     {toast && <Toast toast={toast} />}
     <div className="section-shortcuts"><Link to="/results"><ChartNoAxesCombined size={16} /> Browse all results <ChevronRight size={15} /></Link></div>
     <section className="card data-card"><div className="table-toolbar"><div className="toolbar-search"><Search size={16} /><input value={term} onChange={(event) => setTerm(event.target.value)} placeholder="Search exam title or subject…" /></div><span className="result-count">{data?.meta?.total || 0} exams</span></div>
-      {isLoading ? <TableSkeleton /> : isError ? <ErrorPage /> : data?.data?.length ? <div className="table-scroll"><table><thead><tr><th>EXAM</th><th>SUBJECT</th><th>DATE</th><th>TOTAL MARKS</th><th>BATCHES</th><th>STATUS</th><th>ACTIONS</th></tr></thead><tbody>{data.data.map((exam) => <tr key={exam.id}><td><strong>{exam.title}</strong><small className="table-sub">{exam.type.replace('_', ' ')}</small></td><td>{exam.subject}</td><td>{fmtDate(exam.exam_date)}</td><td>{exam.total_marks}</td><td><div className="batch-pills">{exam.batches?.map((batch) => <span className="pill" key={batch.id}>{batch.name}</span>)}</div></td><td><span className={`status-pill ${exam.status}`}>{exam.status}</span></td><td><div className="actions-cell"><Link className="row-action" to={`/exams/${exam.id}/marks`}>Enter marks</Link><Link className="row-action" to={`/results?exam=${exam.id}`}>Results</Link><button type="button" className="row-action" style={{ color: '#2563eb', fontWeight: 650, display: 'inline-flex', alignItems: 'center', gap: 3 }} onClick={() => setSendResultExam(exam)}><Send size={12} /> Send result</button></div></td></tr>)}</tbody></table></div> : <EmptyState title="No exams created" text="Create an exam and assign the batches taking part." action={<button className="button button-primary button-small" onClick={() => setModal(true)}><Plus size={15} /> Create exam</button>} />}
+      {isLoading ? <TableSkeleton /> : isError ? <ErrorPage /> : data?.data?.length ? <div className="table-scroll"><table><thead><tr><th>EXAM</th><th>SUBJECT</th><th>DATE</th><th>TOTAL MARKS</th><th>BATCHES</th><th>STATUS</th><th>ACTIONS</th></tr></thead><tbody>{data.data.map((exam) => <tr key={exam.id}><td><strong>{exam.title}</strong><small className="table-sub">{exam.type.replace('_', ' ')}</small></td><td>{exam.subject}</td><td>{fmtDate(exam.exam_date)}</td><td>{exam.total_marks}</td><td><div className="batch-pills">{exam.batches?.map((batch) => <span className="pill" key={batch.id}>{batch.name}</span>)}</div></td><td><span className={`status-pill ${exam.status}`}>{exam.status}</span></td><td><div className="actions-cell"><Link className="row-action" to={`/exams/${exam.id}/marks`}>Enter marks</Link><Link className="row-action" to={`/results?exam=${exam.id}`}>Results</Link><button type="button" className="row-action" style={{ color: '#2563eb', fontWeight: 650, display: 'inline-flex', alignItems: 'center', gap: 3 }} onClick={() => setSendResultExam(exam)}><Send size={12} /> Send result</button><button type="button" className="row-action" style={{ color: '#059669', fontWeight: 650, display: 'inline-flex', alignItems: 'center', gap: 3 }} onClick={() => setExportExam(exam)}><ArrowDownToLine size={12} /> Export result</button></div></td></tr>)}</tbody></table></div> : <EmptyState title="No exams created" text="Create an exam and assign the batches taking part." action={<button className="button button-primary button-small" onClick={() => setModal(true)}><Plus size={15} /> Create exam</button>} />}
     </section>
     {modal && <ExamForm onClose={() => setModal(false)} onSaved={() => { setModal(false); queryClient.invalidateQueries({ queryKey: ['exams'] }); notify('Exam created.'); }} />}
     {sendResultExam && <SendResultModal exam={sendResultExam} onClose={() => setSendResultExam(null)} />}
+    {exportExam && <ExportExamModal exam={exportExam} onClose={() => setExportExam(null)} />}
   </>;
 }
 
@@ -982,6 +1127,7 @@ function MarksEntry() {
   const [rows, setRows] = useState([]);
   const [error, setError] = useState('');
   const [sendResultModalOpen, setSendResultModalOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
   const { toast, notify } = useToast();
   const queryClient = useQueryClient();
   const { data: exam } = useQuery({ queryKey: ['exam', id], queryFn: async () => (await api.get(`/exams/${id}`)).data.data });
@@ -999,13 +1145,14 @@ function MarksEntry() {
   };
   const visibleRows = rows.filter((row) => `${row.name} ${row.roll_number}`.toLowerCase().includes(term.toLowerCase()));
   if (!exam) return <LoadingPage />;
-  return <><Link className="back-link" to="/exams"><ArrowLeft size={15} /> All exams</Link><PageHeading eyebrow={`${exam.subject} · ${fmtDate(exam.exam_date)}`} title={exam.title} subtitle={`Maximum score: ${exam.total_marks} marks · ${exam.status}`} action={<div style={{ display: 'flex', gap: 8 }}><button type="button" className="button button-primary" onClick={() => setSendResultModalOpen(true)}><Send size={15} /> Send Result SMS</button></div>} />
+  return <><Link className="back-link" to="/exams"><ArrowLeft size={15} /> All exams</Link><PageHeading eyebrow={`${exam.subject} · ${fmtDate(exam.exam_date)}`} title={exam.title} subtitle={`Maximum score: ${exam.total_marks} marks · ${exam.status}`} action={<div style={{ display: 'flex', gap: 8 }}><button type="button" className="button button-outline" onClick={() => setExportModalOpen(true)}><ArrowDownToLine size={15} /> Export result</button><button type="button" className="button button-primary" onClick={() => setSendResultModalOpen(true)}><Send size={15} /> Send Result SMS</button></div>} />
     {toast && <Toast toast={toast} />}
     <section className="card attendance-filter"><div><div className="form-section-title">Choose a batch</div><p>Marks remain a single result per student for this exam, even if they attend multiple selected batches.</p></div><div className="attendance-controls"><Field label="Exam batch"><select value={batchId} onChange={(event) => { setBatchId(event.target.value); setRows([]); }}><option value="">Select batch…</option>{exam.batches?.map((batch) => <option key={batch.id} value={batch.id}>{batch.name}</option>)}</select></Field><button className="button button-primary" onClick={() => load()}>Load students</button></div></section>
     {error && <div className="form-alert">{error}</div>}
     {!!rows.length && <section className="card data-card attendance-card"><div className="table-toolbar"><div className="toolbar-search"><Search size={16} /><input value={term} onChange={(event) => setTerm(event.target.value)} placeholder="Find a student…" /></div><span className="result-count">Total marks: {exam.total_marks}</span></div><div className="table-scroll"><table><thead><tr><th>STUDENT</th><th>ROLL</th><th>MAXIMUM</th><th>OBTAINED MARKS</th><th>RESULT STATUS</th></tr></thead><tbody>{visibleRows.map((row) => <tr key={row.id}><td><span className="student-cell"><span className="avatar">{initials(row.name)}</span><strong>{row.name}</strong></span></td><td className="mono">{row.roll_number}</td><td>{exam.total_marks}</td><td><input className="marks-input" type="number" min="0" max={exam.total_marks} step="0.01" disabled={row.is_absent} value={row.is_absent ? '' : row.obtained_marks} placeholder="—" onChange={(event) => setRows(rows.map((item) => item.id === row.id ? { ...item, obtained_marks: event.target.value } : item))} /></td><td><label className="absent-toggle"><input type="checkbox" checked={row.is_absent} onChange={(event) => setRows(rows.map((item) => item.id === row.id ? { ...item, is_absent: event.target.checked, obtained_marks: '' } : item))} /> Mark absent</label></td></tr>)}</tbody></table></div><div className="table-footer"><span>Marks can be left blank; absent students are recorded separately from zero marks.</span><button className="button button-primary" onClick={save}><Check size={16} /> Save marks</button></div></section>}
     {!rows.length && batchId && <div className="card empty-card"><EmptyState title="Load the selected batch" text="Students enrolled on the exam date will appear here." /></div>}
     {sendResultModalOpen && exam && <SendResultModal exam={exam} onClose={() => setSendResultModalOpen(false)} />}
+    {exportModalOpen && exam && <ExportExamModal exam={exam} onClose={() => setExportModalOpen(false)} />}
   </>;
 }
 
@@ -1014,17 +1161,19 @@ function Results() {
   const [examId, setExamId] = useState(params.get('exam') || '');
   const [batchId, setBatchId] = useState('');
   const [sendResultExam, setSendResultExam] = useState(null);
+  const [exportExam, setExportExam] = useState(null);
   const { data: exams } = useQuery({ queryKey: ['exams'], queryFn: async () => (await api.get('/exams', { params: { per_page: 100 } })).data.data });
   const { data: batches } = useQuery({ queryKey: ['batches', 'all'], queryFn: async () => (await api.get('/batches', { params: { per_page: 100 } })).data.data });
   const { data, isLoading, isError } = useQuery({ queryKey: ['results', examId, batchId], queryFn: async () => (await api.get('/results', { params: { exam_id: examId || undefined, batch_id: batchId || undefined } })).data });
   const activeExam = examId && exams?.find((e) => String(e.id) === String(examId));
   return <>
-    <PageHeading eyebrow="ACADEMIC RECORDS" title="Results" subtitle="Review marks and performance across all exams." action={<div style={{ display: 'flex', gap: 8 }}>{activeExam && <button type="button" className="button button-primary" onClick={() => setSendResultExam(activeExam)}><Send size={15} /> Send Result SMS</button>}<Link to="/exams" className="button button-outline"><ArrowLeft size={15} /> Exams</Link></div>} />
+    <PageHeading eyebrow="ACADEMIC RECORDS" title="Results" subtitle="Review marks and performance across all exams." action={<div style={{ display: 'flex', gap: 8 }}>{activeExam && <button type="button" className="button button-outline" onClick={() => setExportExam(activeExam)}><ArrowDownToLine size={15} /> Export result</button>}{activeExam && <button type="button" className="button button-primary" onClick={() => setSendResultExam(activeExam)}><Send size={15} /> Send Result SMS</button>}<Link to="/exams" className="button button-outline"><ArrowLeft size={15} /> Exams</Link></div>} />
     <section className="card data-card"><div className="table-toolbar"><div className="toolbar-controls"><select value={examId} onChange={(event) => setExamId(event.target.value)}><option value="">All exams</option>{exams?.map((exam) => <option key={exam.id} value={exam.id}>{exam.title}</option>)}</select><select value={batchId} onChange={(event) => setBatchId(event.target.value)}><option value="">All batches</option>{batches?.map((batch) => <option key={batch.id} value={batch.id}>{batch.name}</option>)}</select></div><span className="result-count">{data?.meta?.total || 0} results</span></div>
       {isLoading ? <TableSkeleton /> : isError ? <ErrorPage /> : data?.data?.length ? <div className="table-scroll"><table><thead><tr><th>STUDENT</th><th>EXAM</th><th>BATCH</th><th>EXAM DATE</th><th>MARKS</th><th>PERCENTAGE</th><th>STATUS</th></tr></thead><tbody>{data.data.map((row) => <tr key={`${row.exam_id}-${row.student_id}`}><td><Link className="text-link" to={`/students/${row.student_id}`}>{row.student} <span className="table-sub">{row.roll_number}</span></Link></td><td>{row.exam}</td><td>{row.batch}</td><td>{fmtDate(row.exam_date)}</td><td>{row.is_absent ? 'Absent' : row.obtained_marks === null ? 'Not entered' : `${row.obtained_marks} / ${row.total_marks}`}</td><td>{row.percentage === null ? '—' : `${row.percentage}%`}</td><td><span className={`status-pill ${row.is_absent ? 'inactive' : row.obtained_marks === null ? 'draft' : 'active'}`}>{row.is_absent ? 'Absent' : row.obtained_marks === null ? 'Pending' : 'Scored'}</span></td></tr>)}</tbody></table></div> : <EmptyState title="No results to show" text="Enter student marks for an exam to see results here." action={<Link to="/exams" className="button button-primary button-small">Go to exams</Link>} />}
       {!!data?.data?.length && <div className="table-footer"><div className="toolbar-controls"><button className="button button-outline button-small" onClick={() => window.print()}><ArrowDownToLine size={15} /> Print results</button><button className="button button-outline button-small" onClick={() => window.open(`${API_ORIGIN}/api/reports/exams?export=1${examId ? `&exam_id=${examId}` : ''}${batchId ? `&batch_id=${batchId}` : ''}`, '_blank')}>Export CSV</button></div><span>Percentage = obtained marks ÷ total marks × 100.</span></div>}
     </section>
     {sendResultExam && <SendResultModal exam={sendResultExam} onClose={() => setSendResultExam(null)} />}
+    {exportExam && <ExportExamModal exam={exportExam} onClose={() => setExportExam(null)} />}
   </>;
 }
 
