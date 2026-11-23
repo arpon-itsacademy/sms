@@ -3653,7 +3653,7 @@ function SmsAutomationPage() {
             <label style={{ fontSize: '12px', fontWeight: 650, color: '#334155', display: 'block', marginBottom: '8px' }}>
               Who Receives Absent SMS (কার কাছে মেসেজ যাবে):
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '10px' }}>
+            <div className="automation-recipients-grid">
               <label className={`sms-choice-card ${absentRecipients.student ? 'active' : ''}`} style={{ padding: '10px 12px' }}>
                 <input
                   type="checkbox"
@@ -3690,8 +3690,8 @@ function SmsAutomationPage() {
             </div>
           </div>
 
-          {/* Template & Live Preview in two columns */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 1fr)', gap: '16px' }}>
+          {/* Template & Live Preview in two columns (stacks vertically on mobile) */}
+          <div className="automation-template-preview-grid">
             <div>
               <div style={{ fontSize: '11px', fontWeight: 650, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '6px' }}>
                 Absent SMS Template (Click tags to insert):
@@ -3799,7 +3799,7 @@ function SmsAutomationPage() {
             <label style={{ fontSize: '12px', fontWeight: 650, color: '#334155', display: 'block', marginBottom: '8px' }}>
               Who Receives Fee SMS (কার কাছে মেসেজ যাবে):
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '10px' }}>
+            <div className="automation-recipients-grid">
               <label className={`sms-choice-card ${feeRecipients.student ? 'active' : ''}`} style={{ padding: '10px 12px' }}>
                 <input
                   type="checkbox"
@@ -3836,8 +3836,8 @@ function SmsAutomationPage() {
             </div>
           </div>
 
-          {/* Template & Live Preview in two columns */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 1fr)', gap: '16px' }}>
+          {/* Template & Live Preview in two columns (stacks vertically on mobile) */}
+          <div className="automation-template-preview-grid">
             <div>
               <div style={{ fontSize: '11px', fontWeight: 650, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '6px' }}>
                 Fee SMS Template (Click tags to insert):
